@@ -1,12 +1,16 @@
 #include <SFML/Graphics.hpp>
 
+#include "SFMLConsole.hpp"
+
 int main()
 {
 
-    sf::RenderWindow window(sf::VideoMode(1280, 720), "SFML works!", sf::Style::Resize | sf::Style::Close);
+    sf::RenderWindow window(sf::VideoMode(1920, 1080), "SFML works!", sf::Style::Resize | sf::Style::Close);
 
     sf::CircleShape shape(100.f);
     shape.setFillColor(sf::Color::Green);
+
+    SFMLConsole console;
 
     while (window.isOpen())
     {
@@ -18,6 +22,7 @@ int main()
         }
 
         window.clear();
+        console.Draw(window);
         window.draw(shape);
         window.display();
     }
