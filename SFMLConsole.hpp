@@ -3,6 +3,11 @@
 
 class InputBox {
     private:
+
+        sf::Cursor textCursor;
+        sf::Cursor defaultCursor;
+        bool cursorLoaded = false;
+
         sf::Clock m_repeatClock;
         float m_repeatDelay = 0.3f;
         float m_repeatSpeed = 0.05f;
@@ -26,9 +31,14 @@ class InputBox {
         sf::Text text;
         std::string inputString;
         bool isFocused = false;
+        bool isHovering = false;
 
 
         InputBox(sf::Font& font, sf::Vector2f position, sf::Vector2f size) {
+
+            //Load Cursors
+            cursorLoaded = textCursor.loadFromSystem(sf::Cursor::Text) && defaultCursor.loadFromSystem(sf::Cursor::Arrow);
+
             box.setSize(size);
             box.setFillColor(sf::Color(50, 50, 50));
             box.setOutlineColor(sf::Color::White);
@@ -42,11 +52,14 @@ class InputBox {
             text.setPosition(position.x + 10, position.y + (size.y / 2) - 10);
         }
 
-        void handleEvent(const sf::Event& event, const sf::RenderWindow& window) {
+        void handleEvent(const sf::Event& event, sf::RenderWindow& window) {
+
             //Check if user clicked inside the box;
             if (event.type == sf::Event::MouseButtonPressed) {
                 sf::Vector2f mousePos = sf::Vector2f(sf::Mouse::getPosition(window));
+                bool wasFocused = isFocused;
                 isFocused = box.getGlobalBounds().contains(mousePos);
+
             }
 
             if (isFocused && event.type == sf::Event::TextEntered) {
@@ -57,9 +70,25 @@ class InputBox {
             }
         }
 
-        void Update() {
+        void Update(sf::RenderWindow& window) {
+            //Check for Hovering
+            if (box.getGlobalBounds().contains(sf::Vector2f(sf::Mouse::getPosition(window))))
+                isHovering = true;
+            else
+                isHovering = false;
+
+
+            if (cursorLoaded) {
+                window.setMouseCursor(isHovering ? textCursor : defaultCursor);
+            }
+
+            box.setOutlineThickness(0);
+
+            //Don't do anything else if we arent focused on the input.
             if (!isFocused) return;
 
+            box.setOutlineThickness(1);
+            
             //Handle backspace
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::BackSpace)) {
                 float elapsed = m_repeatClock.getElapsedTime().asSeconds();
@@ -129,8 +158,6 @@ class SFMLConsole {
     SFMLConsole() 
      : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)) {
         std::cout << "Console has been created" << std::endl;
-
-        
 
         bg.setSize(consoleSize);
         bg.setPosition(300, 300);
@@ -208,7 +235,7 @@ class SFMLConsole {
             }
         }
 
-        inputObj.Update();
+        inputObj.Update(window);
 
         if (!sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Unknown)) {
             m_textInputActive = false;
