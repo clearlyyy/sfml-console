@@ -19,7 +19,12 @@ int main()
         {
             if (event.type == sf::Event::Closed)
                 window.close();
+
+            console.Update(&event, window);
         }
+
+        console.Update(nullptr, window);
+
 
         window.clear();
         console.Draw(window);
