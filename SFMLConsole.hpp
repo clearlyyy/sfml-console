@@ -1,5 +1,6 @@
 #include <SFML/Graphics.hpp>
 #include <iostream>
+#include <deque>
 
 class InputBox {
     private:
@@ -77,7 +78,6 @@ class InputBox {
             else
                 isHovering = false;
 
-
             if (cursorLoaded) {
                 window.setMouseCursor(isHovering ? textCursor : defaultCursor);
             }
@@ -127,15 +127,133 @@ class InputBox {
             text.setPosition(box.getPosition().x + 10, box.getPosition().y + (size.y / 2) - 10);
         }
 
+        std::string getText() {
+            return inputString;
+        }
+
+        void clearText() {
+            inputString = "";
+        }
+
+};
+
+struct LogEntry {
+    sf::Text text;
+    sf::Color color;
+};
+
+class ConsoleLogView {
+    private:
+    
+    std::deque<LogEntry> logEntries;
+    sf::Vector2f position;
+    sf::Vector2f size;
+
+    float scrollOffset = 0.0f;
+    const float SCROLL_SPEED = 20.0f;
+    const size_t MAX_LOGS = 1000;
+    const float LINE_HEIGHT = 20.0f;
+
+    bool autoScroll = true;
+
+    public:
+
+    ConsoleLogView(sf::Vector2f pos, sf::Vector2f size) : position(pos), size(size) {
+        std::cout << "Created Log View with SizeY: " << size.y << std::endl;
+
+        if (size.y < LINE_HEIGHT) size.y = LINE_HEIGHT;
+    }
+    
+
+    void addLog(sf::Font& font, const std::string& message, sf::Color color) {
+        // Create new log entry
+        LogEntry newEntry;
+        newEntry.text.setFont(font);
+        newEntry.text.setString(message);
+        newEntry.text.setCharacterSize(16);
+        newEntry.text.setFillColor(color);
+        newEntry.color = color;
+
+        // Add to deque
+        logEntries.push_back(newEntry);
+
+        // Remove oldest if exceeding max
+        if (logEntries.size() > MAX_LOGS) {
+            logEntries.pop_front();
+        }
+
+        // Auto-scroll to bottom if enabled
+        if (autoScroll) {
+            scrollToBottom();
+        }
+    }
+
+    void handleScroll(float delta) {
+        // User is scrolling - disable auto-scroll
+        autoScroll = false;
+        
+        // Apply scroll (negative delta for natural scrolling)
+        scrollOffset -= delta * SCROLL_SPEED;
+        
+        // Calculate maximum scroll offset
+        float contentHeight = logEntries.size() * LINE_HEIGHT;
+        float maxScroll = std::max(0.0f, contentHeight - size.y);
+        
+        // Clamp scroll position
+        scrollOffset = std::clamp(scrollOffset, 0.0f, maxScroll);
+        
+        // Re-enable auto-scroll if within 1 line of bottom
+        if (scrollOffset >= maxScroll - LINE_HEIGHT) {
+            autoScroll = true;
+        }
+    }
+
+    void scrollToBottom() {
+        float contentHeight = logEntries.size() * LINE_HEIGHT;
+        scrollOffset = std::max(0.0f, contentHeight - size.y);
+        autoScroll = true;
+    }
+
+    void DrawConsoleLog(sf::RenderWindow& window, sf::RectangleShape background, float inputHeight, float titleBarHeight) {
+        // Calculate visible range
+        float visibleTop = position.y + titleBarHeight + 5;
+        float visibleBottom = (position.y + size.y) + 5500;
+        float firstVisibleY = visibleTop - scrollOffset;
+        
+        // Draw visible logs
+        float currentY = firstVisibleY;
+        for (const auto& entry : logEntries) {
+            // Only draw if within visible area
+            if (currentY + LINE_HEIGHT >= visibleTop && currentY <= visibleBottom) {
+                // Create a copy to modify position without affecting stored text
+                sf::Text text = entry.text;
+                text.setPosition(position.x + 10, currentY);
+                window.draw(text);
+            }
+            
+            currentY += LINE_HEIGHT;
+            
+            // Early exit if we're past visible area
+            if (currentY > visibleBottom) {
+                break;
+            }
+        }
+    }
 };
 
 class SFMLConsole {
     private:
+
     sf::RectangleShape bg;
     sf::RectangleShape input;
     sf::RectangleShape titleBar;
 
+    
+
+    sf::Vector2f defaultConsolePosition = sf::Vector2f(300, 300);
     sf::Vector2f consoleSize = sf::Vector2f(900,700);
+
+    
     
     float inputHeight = 50;
     float titleBarHeight = 40;
@@ -151,13 +269,19 @@ class SFMLConsole {
     sf::Vector2f offset;
 
     float inputPadding = 10.0f;
+    ConsoleLogView logManager;
 
 
     public:
     
     SFMLConsole() 
-     : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)) {
+     : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)),
+       logManager(sf::Vector2f(300,300), sf::Vector2f(consoleSize.x, consoleSize.y - inputHeight - titleBarHeight)) {
         std::cout << "Console has been created" << std::endl;
+        logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
+        logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
+        logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
+        logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
 
         bg.setSize(consoleSize);
         bg.setPosition(300, 300);
@@ -233,6 +357,16 @@ class SFMLConsole {
             if (event->type == sf::Event::TextEntered) {
                 m_textInputActive = true;
             }
+
+            if (event->type == sf::Event::KeyPressed && event->key.code == sf::Keyboard::Enter) {
+                std::string enteredText = inputObj.getText();
+                logManager.addLog(defaultFont, enteredText, sf::Color::White);
+                inputObj.clearText();
+            }
+
+            if (event->type == sf::Event::MouseWheelScrolled) {
+                logManager.handleScroll(event->mouseWheelScroll.delta);
+            }
         }
 
         inputObj.Update(window);
@@ -250,6 +384,7 @@ class SFMLConsole {
         window.draw(titleText);
         window.draw(closeButton);
         inputObj.Draw(window);
+        logManager.DrawConsoleLog(window, bg, inputHeight, titleBarHeight);
     }
 
 };

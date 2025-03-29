@@ -27,8 +27,8 @@ int main()
 
 
         window.clear();
+        //window.draw(shape);
         console.Draw(window);
-        window.draw(shape);
         window.display();
     }
 
