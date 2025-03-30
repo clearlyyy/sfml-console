@@ -217,8 +217,12 @@ class ConsoleLogView {
     void DrawConsoleLog(sf::RenderWindow& window, sf::RectangleShape background, float inputHeight, float titleBarHeight) {
         // Calculate visible range
         float visibleTop = position.y + titleBarHeight + 5;
-        float visibleBottom = (position.y + size.y) + 5500;
+        float visibleBottom = visibleTop + size.y;
+        std::cout << visibleBottom << " " << background.getSize().y << std::endl;
         float firstVisibleY = visibleTop - scrollOffset;
+
+        std::cout << "Drawing between " << visibleTop << " and " << visibleBottom 
+              << " (scroll: " << scrollOffset << ")\n";
         
         // Draw visible logs
         float currentY = firstVisibleY;
@@ -248,13 +252,9 @@ class SFMLConsole {
     sf::RectangleShape input;
     sf::RectangleShape titleBar;
 
-    
-
     sf::Vector2f defaultConsolePosition = sf::Vector2f(300, 300);
     sf::Vector2f consoleSize = sf::Vector2f(900,700);
 
-    
-    
     float inputHeight = 50;
     float titleBarHeight = 40;
 
@@ -276,12 +276,12 @@ class SFMLConsole {
     
     SFMLConsole() 
      : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)),
-       logManager(sf::Vector2f(300,300), sf::Vector2f(consoleSize.x, consoleSize.y - inputHeight - titleBarHeight)) {
+       logManager(sf::Vector2f(300,300), sf::Vector2f(consoleSize.x, consoleSize.y - titleBarHeight - 20)) {
         std::cout << "Console has been created" << std::endl;
         logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
         logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
         logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
-        logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
+        logManager.addLog(defaultFont, "Console initialized", sf::Color::Red);
 
         bg.setSize(consoleSize);
         bg.setPosition(300, 300);
@@ -380,11 +380,11 @@ class SFMLConsole {
     void Draw(sf::RenderWindow& window) {
         window.draw(bg);
         window.draw(input);
+        logManager.DrawConsoleLog(window, bg, inputHeight, titleBarHeight);
         window.draw(titleBar);
         window.draw(titleText);
         window.draw(closeButton);
         inputObj.Draw(window);
-        logManager.DrawConsoleLog(window, bg, inputHeight, titleBarHeight);
     }
 
 };
