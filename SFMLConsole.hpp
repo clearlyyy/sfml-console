@@ -156,10 +156,27 @@ class InputBox {
             }
         }
 
+        //Bit of a hacky way of masking the text so it doesn't overflow from the left of the console when typing a long command.
         void Draw(sf::RenderWindow& window) {
+            
             window.draw(box);
-            window.draw(text);
-
+    
+            sf::RenderTexture maskTexture;
+            maskTexture.create(static_cast<unsigned>(box.getSize().x), 
+                              static_cast<unsigned>(box.getSize().y));
+            maskTexture.clear(sf::Color::Transparent);
+        
+            sf::Text maskedText = text; 
+            maskedText.setPosition(text.getPosition() - box.getPosition());
+        
+            maskTexture.draw(maskedText);
+            maskTexture.display();
+        
+            sf::Sprite maskSprite(maskTexture.getTexture());
+            maskSprite.setPosition(box.getPosition());
+            window.draw(maskSprite);
+        
+            // Draw Caret seperately
             if (isFocused && m_caretVisible) {
                 window.draw(m_caret);
             }
@@ -307,19 +324,22 @@ class ConsoleLogView {
     void DrawConsoleLog(sf::RenderWindow& window, sf::RectangleShape background, float inputHeight, float titleBarHeight) {
         float visibleTop = position.y + titleBarHeight;
         float visibleBottom = visibleTop + size.y;
-        float firstVisibleY = visibleTop - scrollOffset;
-    
-        float currentY = firstVisibleY;
-    
-        for (const auto& entry : logEntries) {
+        float firstVisibleY = position.y + titleBarHeight;  // Start drawing from the top of the visible area
+        
+        // Calculate which lines should be visible based on scroll offset
+        size_t firstVisibleLine = static_cast<size_t>(scrollOffset / LINE_HEIGHT);
+        float yOffset = firstVisibleY - (scrollOffset - firstVisibleLine * LINE_HEIGHT);
+        
+        // Draw only visible lines
+        for (size_t i = firstVisibleLine; i < logEntries.size(); i++) {
+            const auto& entry = logEntries[i];
             sf::Text text = entry.text;
-            text.setPosition(position.x + 10, currentY);
+            text.setPosition(position.x + PADDING, yOffset);
             window.draw(text);
-    
-            // Move to the next line
-            currentY += LINE_HEIGHT;
-    
-            if (currentY > visibleBottom) {
+            
+            yOffset += LINE_HEIGHT;
+            
+            if (yOffset > visibleBottom) {
                 break;
             }
         }
