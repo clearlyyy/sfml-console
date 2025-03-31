@@ -4,6 +4,8 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <map>
+#include <functional>
 
 class InputBox {
     private:
@@ -199,6 +201,7 @@ class InputBox {
         void clearText() {
             inputString = "";
         }
+        
 };
 
 
@@ -272,7 +275,6 @@ class ConsoleLogView {
         auto lines = splitLongText(message, font, 16);
 
         for (const auto& line : lines) {
-            // Create new log entry
             LogEntry newEntry;
             newEntry.text.setFont(font);
             newEntry.text.setString(line);
@@ -280,7 +282,6 @@ class ConsoleLogView {
             newEntry.text.setFillColor(color);
             newEntry.color = color;
 
-            // Add to deque
             logEntries.push_back(newEntry);
         }
 
@@ -296,10 +297,10 @@ class ConsoleLogView {
     }
 
     void handleScroll(float delta) {
-        // User is scrolling - disable auto-scroll
+        // user is scrolling, so disable auto scroll
         autoScroll = false;
         
-        // Apply scroll (negative delta for natural scrolling)
+        // Apply scroll
         scrollOffset -= delta * SCROLL_SPEED;
         
         // Calculate maximum scroll offset
@@ -309,7 +310,7 @@ class ConsoleLogView {
         // Clamp scroll position
         scrollOffset = std::clamp(scrollOffset, 0.0f, maxScroll);
         
-        // Re-enable auto-scroll if within 1 line of bottom
+        // Reenable auto-scroll if within 1 line of bottom
         if (scrollOffset >= maxScroll - LINE_HEIGHT) {
             autoScroll = true;
         }
@@ -353,10 +354,30 @@ class ConsoleLogView {
         size = sz;
     }
 
+    void clear() {
+        logEntries.clear();
+    }
+
+};
+
+/// @brief Handles and stores commands.
+class CommandManager {
+    public:
+        std::map<std::string, std::function<void()>> commands;
+
+        std::map<std::string, std::function<void()>> getCommandsList() {
+            return commands;
+        }
+        
+        void addCommand(const std::string& name, std::function<void()> func) {
+            commands[name] = func;
+        }
 };
 
 class SFMLConsole {
     private:
+
+    CommandManager cmdManager;
 
     sf::RectangleShape bg;
     sf::RectangleShape titleBar;
@@ -380,8 +401,27 @@ class SFMLConsole {
     float inputPadding = 10.0f;
     ConsoleLogView logManager;
 
+    void executeCommand(const std::string& name) {
+        std::map<std::string, std::function<void()>> cmds = cmdManager.getCommandsList();
+        auto it = cmds.find(name);
+        if (it != cmds.end()) {
+            it->second();
+        } else {
+            logManager.addLog(defaultFont, "Command not found, type 'help' to see a list of avaliable commands.", sf::Color(227, 100, 100) );
+        }
+    }
+
+    void displayCommands() {
+        std::map<std::string, std::function<void()>> cmds = cmdManager.getCommandsList();
+        logManager.addLog(defaultFont, "------All Currently Avaliable Commands------", sf::Color::White);
+        for (const auto& pair : cmds) {
+            logManager.addLog(defaultFont, pair.first, sf::Color::White);
+        }
+    }
+
     public:
     
+    // Constructor 
     SFMLConsole() 
      : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)),
        logManager(defaultConsolePosition, sf::Vector2f(consoleSize.x, consoleSize.y - titleBarHeight - inputHeight - 5)) {
@@ -411,8 +451,6 @@ class SFMLConsole {
             std::cout << "SFML-CONSOLE: ERROR LOADING defaultFont << std::endl" << std::endl;
         }
 
-
-
         titleText.setString("SFML-CONSOLE");
         titleText.setFont(defaultFont);
         titleText.setCharacterSize(16);
@@ -430,8 +468,12 @@ class SFMLConsole {
         logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
         logManager.addLog(defaultFont, "Console initialized", sf::Color::Red);
 
+        cmdManager.addCommand("clear", std::bind(&ConsoleLogView::clear, &logManager));
+        cmdManager.addCommand("help", std::bind(&SFMLConsole::displayCommands, this));
+
     }
 
+    // Update Function, place this inside your event loop, otherwise use a nullptr for event.
     void Update(sf::Event* event, sf::RenderWindow& window) {
         // Check if left mouse button is pressed
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
@@ -465,7 +507,7 @@ class SFMLConsole {
             ));
 
         }
-
+        
         if (event) {
             inputObj.handleEvent(*event, window);
             
@@ -477,6 +519,10 @@ class SFMLConsole {
                 std::string enteredText = inputObj.getText();
                 logManager.addLog(defaultFont, enteredText, sf::Color::White);
                 inputObj.clearText();
+
+                //Try to run command.
+                executeCommand(enteredText);
+
             }
 
             if (event->type == sf::Event::MouseWheelScrolled) {
@@ -492,14 +538,21 @@ class SFMLConsole {
 
     }
 
+
+    // Draw the Console, place this at the very top of your scene, otherwise your game may be drawn over it.
     void Draw(sf::RenderWindow& window) {
         window.draw(bg);
         logManager.DrawConsoleLog(window, bg, inputHeight, titleBarHeight);
         window.draw(titleBar);
         window.draw(titleText);
         window.draw(closeButton);
-        inputObj.Draw(window);
-        
+        inputObj.Draw(window);  
     }
 
+    
+    // Public CMD Functions
+    void addCommand(std::string cmd, std::function<void()> func) {
+        cmdManager.addCommand(cmd, func);
+    }
+    
 };
