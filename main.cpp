@@ -26,7 +26,7 @@ int main()
         console.Update(nullptr, window);
 
 
-        window.clear();
+        window.clear(sf::Color(159, 228, 237));
         //window.draw(shape);
         console.Draw(window);
         window.display();
