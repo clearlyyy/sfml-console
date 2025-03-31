@@ -6,6 +6,7 @@
 #include <vector>
 #include <map>
 #include <functional>
+#include <limits>
 
 class InputBox {
     private:
@@ -23,25 +24,161 @@ class InputBox {
         sf::Clock m_caretBlinkClock;
         bool m_caretVisible = false;
         const float m_caretBlinkInterval = 0.5f;
+        size_t m_caretPosition = 0;
+
+        size_t m_selectionStart = 0;
+        size_t m_selectionEnd = 0;
+        size_t m_selectionAnchor = 0;
+        bool m_isSelecting = false;
+        sf::RectangleShape m_selectionHighlight;
 
         void updateCaretPosition() {
-            float caretX = text.findCharacterPos(inputString.size()).x;
-            if (inputString.empty()) {
-                caretX = text.getPosition().x;
+            float caretX = text.getPosition().x;
+            if (!inputString.empty()) {
+                if (m_caretPosition > 0) {
+                    caretX = text.findCharacterPos(m_caretPosition).x;
+                }
             }
             m_caret.setPosition(caretX, text.getPosition().y);
         }
 
         void processKeyInput(sf::Uint32 unicode) {
-            if (unicode == '\b') {
-                if (!inputString.empty()) {
-                    inputString.pop_back();
-                }
+            if (hasSelection() && (unicode == '\b' || unicode == 127)) {
+                deleteSelectedText();
+                return;
             }
-            else if (unicode >= 32 && unicode <= 126) {
-                inputString += static_cast<char>(unicode);
+            if (unicode == '\b') { // Backspace Key
+                if (m_caretPosition > 0 && !inputString.empty()) {
+                    inputString.erase(m_caretPosition - 1, 1);
+                    m_caretPosition--;
+                }
+            } else if (unicode == 127) { // Delete Key
+                if (m_caretPosition < inputString.size()) {
+                    inputString.erase(m_caretPosition, 1);
+                }
+            } else if (unicode >= 32 && unicode <= 126) {
+                inputString.insert(m_caretPosition, 1, static_cast<char>(unicode));
+                m_caretPosition++;
             }
             text.setString(inputString);
+        }
+
+        size_t findClickedCharacterPosition(float mouseX) {
+            // If the string is empty or mouse is before the first character, return 0
+            if (inputString.empty() || mouseX <= 0) {
+                return 0;
+            }
+        
+            // Get the global bounds of the visible text
+            float textLeft = text.getPosition().x;
+            float textRight = textLeft + text.getLocalBounds().width;
+        
+            // If mouse is beyond the text right edge, return end position
+            if (mouseX >= textRight - textLeft) {
+                return inputString.size();
+            }
+        
+            // Binary search to find the closest character position
+            size_t low = 0;
+            size_t high = inputString.size();
+            size_t bestMatch = inputString.size();
+            float smallestDistance = std::numeric_limits<float>::max();
+        
+            while (low <= high) {
+                size_t mid = low + (high - low) / 2;
+                float charPos = text.findCharacterPos(mid).x - textLeft;
+        
+                float distance = std::abs(mouseX - charPos);
+                if (distance < smallestDistance) {
+                    smallestDistance = distance;
+                    bestMatch = mid;
+                }
+        
+                if (charPos < mouseX) {
+                    low = mid + 1;
+                } else if (charPos > mouseX) {
+                    high = mid - 1;
+                } else {
+                    // Exact match found
+                    return mid;
+                }
+            }
+        
+            // For the best match, check if we should be before or after the character
+            if (bestMatch > 0) {
+                float prevCharPos = text.findCharacterPos(bestMatch - 1).x - textLeft;
+                float currCharPos = text.findCharacterPos(bestMatch).x - textLeft;
+                float midpoint = prevCharPos + (currCharPos - prevCharPos) / 2;
+                
+                if (mouseX < midpoint) {
+                    return bestMatch - 1;
+                }
+            }
+        
+            return bestMatch;
+        }
+
+        void copyToClipboard() {
+            if (hasSelection()) {
+                size_t start = std::min(m_selectionStart, m_selectionEnd);
+                size_t end = std::max(m_selectionStart, m_selectionEnd);
+                std::string selectedText = inputString.substr(start, end - start);
+                sf::Clipboard::setString(selectedText);
+            }
+        }
+        
+        void cutToClipboard() {
+            if (hasSelection()) {
+                copyToClipboard();
+                deleteSelectedText();
+            }
+        }
+        
+        void pasteFromClipboard() {
+            std::string clipboardText = sf::Clipboard::getString();
+            if (!clipboardText.empty()) {
+                if (hasSelection()) {
+                    deleteSelectedText();
+                }
+                inputString.insert(m_caretPosition, clipboardText);
+                m_caretPosition += clipboardText.size();
+                text.setString(inputString);
+            }
+        }
+        
+        void deleteSelectedText() {
+            if (hasSelection()) {
+                size_t start = std::min(m_selectionStart, m_selectionEnd);
+                size_t end = std::max(m_selectionStart, m_selectionEnd);
+                inputString.erase(start, end - start);
+                m_caretPosition = start;
+                text.setString(inputString);
+                clearSelection();
+            }
+        }
+        
+        bool hasSelection() const {
+            return m_selectionStart != m_selectionEnd;
+        }
+        
+        void clearSelection() {
+            m_selectionStart = m_caretPosition;
+            m_selectionEnd = m_caretPosition;
+            m_selectionAnchor = m_caretPosition;
+        }
+
+        void updateSelectionHighlight() {
+            if (!hasSelection()) {
+                return;
+            }
+        
+            // Get positions of selection start and end
+            float startX = text.findCharacterPos(m_selectionStart).x;
+            float endX = text.findCharacterPos(m_selectionEnd).x;
+        
+            // Create the highlight rectangle
+            m_selectionHighlight.setPosition(startX, text.getPosition().y);
+            m_selectionHighlight.setSize(sf::Vector2f(endX - startX, text.getCharacterSize() * 1.2f));
         }
 
     public:
@@ -71,44 +208,207 @@ class InputBox {
             m_caret.setFillColor(sf::Color::White);
             m_caretVisible = false;
             m_caretBlinkClock.restart();
+
+            m_selectionHighlight.setFillColor(sf::Color(100,100,255, 150));
+
         }
 
         void handleEvent(const sf::Event& event, sf::RenderWindow& window) {
+            // Handle focus changes
             if (event.type == sf::Event::MouseButtonPressed) {
-                sf::Vector2f mousePos = sf::Vector2f(sf::Mouse::getPosition(window));
+                sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
                 bool wasFocused = isFocused;
                 isFocused = box.getGlobalBounds().contains(mousePos);
+        
+                if (isFocused) {
+                    // Just gained focus
+                    if (!wasFocused) {
+                        m_caretBlinkClock.restart();
+                        m_caretVisible = true;
+                    }
+                    
+                    // Handle text selection/caret positioning
+                    float mouseX = mousePos.x - text.getPosition().x + textOffset;
+                    m_caretPosition = findClickedCharacterPosition(mouseX);
+                    
+                    // Initialize selection - track initial position
+                    m_selectionStart = m_caretPosition;
+                    m_selectionEnd = m_caretPosition;
+                    m_isSelecting = true;
+                    
+                    return;
+                }
+            }
+            else if (event.type == sf::Event::MouseButtonReleased) {
+                m_isSelecting = false;
+            }
+        
+            // Only process these events if we have focus
+            if (!isFocused) return;
+        
+            // Handle text selection dragging
+            if (event.type == sf::Event::MouseMoved && m_isSelecting) {
+                sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                float mouseX = mousePos.x - text.getPosition().x + textOffset;
+                size_t newCaretPos = findClickedCharacterPosition(mouseX);
+                
+                // Update caret position
+                m_caretPosition = newCaretPos;
+                
+                // Update selection - maintain original anchor point
+                if (newCaretPos < m_selectionStart) {
+                    // Dragging left - selection goes from new position to original start
+                    m_selectionStart = newCaretPos;
+                } 
+                else {
+                    // Dragging right - selection goes from original start to new position
+                    m_selectionEnd = newCaretPos;
+                }
+            }
+        
+            // Handle Keyboard shortcuts
+            if (event.type == sf::Event::KeyPressed) {
+                bool ctrlPressed = event.key.control;
+                bool shiftPressed = event.key.shift;
 
-                if (isFocused != wasFocused) {
+                if (ctrlPressed) {
+                    if (event.key.code == sf::Keyboard::C && hasSelection()) {
+                        copyToClipboard();
+                        return;
+                    }
+                    else if (event.key.code == sf::Keyboard::X && hasSelection()) {
+                        cutToClipboard();
+                        return;
+                    }
+                    else if (event.key.code == sf::Keyboard::V) {
+                        pasteFromClipboard();
+                        return;
+                    }
+                }
+                if (ctrlPressed && event.key.code == sf::Keyboard::A) {
+                    // Select all text
+                    m_selectionStart = 0;
+                    m_selectionEnd = inputString.size();
+                    m_caretPosition = inputString.size(); // Move caret to end
+                    m_selectionAnchor = 0; // Set anchor to start
+                    m_caretBlinkClock.restart();
+                    m_caretVisible = true;
+                    return; // Skip further processing
+                }
+
+                // Handle navigation keys with selection
+                if (event.key.code == sf::Keyboard::Left) {
+                    if (m_caretPosition > 0) {
+                        m_caretPosition--;
+                        if (shiftPressed) {
+                            if (!hasSelection()) {
+                                // Start new selection - anchor at original position
+                                m_selectionAnchor = m_caretPosition + 1;
+                                m_selectionStart = m_selectionAnchor;
+                                m_selectionEnd = m_caretPosition;
+                            } else {
+                                // Extend existing selection
+                                if (m_caretPosition < m_selectionAnchor) {
+                                    m_selectionStart = m_caretPosition;
+                                    m_selectionEnd = m_selectionAnchor;
+                                } else {
+                                    m_selectionStart = m_selectionAnchor;
+                                    m_selectionEnd = m_caretPosition;
+                                }
+                            }
+                        } else {
+                            clearSelection();
+                        }
+                    }
+                    m_caretBlinkClock.restart();
+                    m_caretVisible = true;
+                } 
+                else if (event.key.code == sf::Keyboard::Right) {
+                    if (m_caretPosition < inputString.size()) {
+                        m_caretPosition++;
+                        if (shiftPressed) {
+                            if (!hasSelection()) {
+                                // Start new selection - anchor at original position
+                                m_selectionAnchor = m_caretPosition - 1;
+                                m_selectionStart = m_selectionAnchor;
+                                m_selectionEnd = m_caretPosition;
+                            } else {
+                                // Extend existing selection
+                                if (m_caretPosition > m_selectionAnchor) {
+                                    m_selectionStart = m_selectionAnchor;
+                                    m_selectionEnd = m_caretPosition;
+                                } else {
+                                    m_selectionStart = m_caretPosition;
+                                    m_selectionEnd = m_selectionAnchor;
+                                }
+                            }
+                        } else {
+                            clearSelection();
+                        }
+                    }
+                    m_caretBlinkClock.restart();
+                    m_caretVisible = true;
+                }
+                // [Keep Home/End handling...]
+
+                else if (event.key.code == sf::Keyboard::Delete) {
+                    if (hasSelection()) {
+                        deleteSelectedText();
+                    } else if (m_caretPosition < inputString.size()) {
+                        inputString.erase(m_caretPosition, 1);
+                        text.setString(inputString);
+                    }
+                }
+            }
+        
+            // Handle text input (separate from key presses)
+            if (event.type == sf::Event::TextEntered) {
+                // Ignore control characters (except backspace which is handled elsewhere)
+                if (event.text.unicode == '\b') {
+                    if (hasSelection()) {
+                        deleteSelectedText();
+                    } else if (m_caretPosition > 0) {
+                        inputString.erase(m_caretPosition - 1, 1);
+                        m_caretPosition--;
+                        text.setString(inputString);
+                    }
+                    m_lastUnicode = event.text.unicode;
+                    m_repeatClock.restart();
+                    m_keyIsRepeating = false;
+        
+                    updateCaretPosition();
+                    m_caretBlinkClock.restart();
+                    m_caretVisible = true;
+                }
+                else if (event.text.unicode >= 32 && event.text.unicode <= 126) {
+                    if (hasSelection()) {
+                        deleteSelectedText();
+                    }
+                    inputString.insert(m_caretPosition, 1, static_cast<char>(event.text.unicode));
+                    m_caretPosition++;
+                    text.setString(inputString);
+                    
+                    m_lastUnicode = event.text.unicode;
+                    m_repeatClock.restart();
+                    m_keyIsRepeating = false;
+        
+                    updateCaretPosition();
                     m_caretBlinkClock.restart();
                     m_caretVisible = true;
                 }
             }
-
-            if (isFocused && event.type == sf::Event::TextEntered) {
-                processKeyInput(event.text.unicode);
-                m_lastUnicode = event.text.unicode;
-                m_repeatClock.restart();
-                m_keyIsRepeating = false;
-
-                updateCaretPosition();
-                m_caretBlinkClock.restart();
-                m_caretVisible = true;
-            }
         }
 
         void Update(sf::RenderWindow& window) {
-            if (box.getGlobalBounds().contains(sf::Vector2f(sf::Mouse::getPosition(window)))) {
-                isHovering = true;
-            } else {
-                isHovering = false;
-            }
+            isHovering = box.getGlobalBounds().contains(sf::Vector2f(sf::Mouse::getPosition(window)));
 
             if (cursorLoaded) {
                 window.setMouseCursor(isHovering ? textCursor : defaultCursor);
             }
-
+            
             if (!isFocused) return;
+
+            updateSelectionHighlight();
 
             box.setFillColor(sf::Color(26, 26, 26));
 
@@ -162,6 +462,10 @@ class InputBox {
         void Draw(sf::RenderWindow& window) {
             
             window.draw(box);
+
+            if (isFocused && hasSelection()) {
+                window.draw(m_selectionHighlight);
+            }
     
             sf::RenderTexture maskTexture;
             maskTexture.create(static_cast<unsigned>(box.getSize().x), 
@@ -200,6 +504,9 @@ class InputBox {
 
         void clearText() {
             inputString = "";
+            m_caretPosition = 0;
+            text.setString(inputString);
+            updateCaretPosition();
         }
         
 };
