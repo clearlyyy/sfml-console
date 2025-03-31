@@ -176,7 +176,7 @@ class InputBox {
             float startX = text.findCharacterPos(m_selectionStart).x;
             float endX = text.findCharacterPos(m_selectionEnd).x;
         
-            // Create the highlight rectangle
+            // Init the highlight rectangle
             m_selectionHighlight.setPosition(startX, text.getPosition().y);
             m_selectionHighlight.setSize(sf::Vector2f(endX - startX, text.getCharacterSize() * 1.2f));
         }
@@ -187,7 +187,7 @@ class InputBox {
         std::string inputString;
         bool isFocused = false;
         bool isHovering = false;
-        float textOffset = 0.f; // This will be used for horizontal scrolling
+        float textOffset = 0.f; 
         sf::FloatRect textBounds;
 
         InputBox(sf::Font& font, sf::Vector2f position, sf::Vector2f size) {
@@ -257,11 +257,11 @@ class InputBox {
                 
                 // Update selection - maintain original anchor point
                 if (newCaretPos < m_selectionStart) {
-                    // Dragging left - selection goes from new position to original start
+                    // Dragging left
                     m_selectionStart = newCaretPos;
                 } 
                 else {
-                    // Dragging right - selection goes from original start to new position
+                    // Dragging right
                     m_selectionEnd = newCaretPos;
                 }
             }
@@ -289,11 +289,11 @@ class InputBox {
                     // Select all text
                     m_selectionStart = 0;
                     m_selectionEnd = inputString.size();
-                    m_caretPosition = inputString.size(); // Move caret to end
-                    m_selectionAnchor = 0; // Set anchor to start
+                    m_caretPosition = inputString.size(); 
+                    m_selectionAnchor = 0; 
                     m_caretBlinkClock.restart();
                     m_caretVisible = true;
-                    return; // Skip further processing
+                    return; 
                 }
 
                 // Handle navigation keys with selection
@@ -328,12 +328,10 @@ class InputBox {
                         m_caretPosition++;
                         if (shiftPressed) {
                             if (!hasSelection()) {
-                                // Start new selection - anchor at original position
                                 m_selectionAnchor = m_caretPosition - 1;
                                 m_selectionStart = m_selectionAnchor;
                                 m_selectionEnd = m_caretPosition;
                             } else {
-                                // Extend existing selection
                                 if (m_caretPosition > m_selectionAnchor) {
                                     m_selectionStart = m_selectionAnchor;
                                     m_selectionEnd = m_caretPosition;
@@ -349,7 +347,6 @@ class InputBox {
                     m_caretBlinkClock.restart();
                     m_caretVisible = true;
                 }
-                // [Keep Home/End handling...]
 
                 else if (event.key.code == sf::Keyboard::Delete) {
                     if (hasSelection()) {
