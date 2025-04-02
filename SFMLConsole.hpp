@@ -634,7 +634,6 @@ class ConsoleLogView {
         // Calculate which lines should be visible based on scroll offset
         size_t firstVisibleLine = static_cast<size_t>(scrollOffset / LINE_HEIGHT);
         float yOffset = firstVisibleY - (scrollOffset - firstVisibleLine * LINE_HEIGHT);
-        
         // Draw only visible lines
         for (size_t i = firstVisibleLine; i < logEntries.size(); i++) {
             const auto& entry = logEntries[i];
@@ -681,6 +680,7 @@ class CommandManager {
 class SFMLConsole {
     private:
 
+    bool isVisible = true;
     CommandManager cmdManager;
 
     sf::RectangleShape bg;
@@ -715,6 +715,7 @@ class SFMLConsole {
         }
     }
 
+  // Display all avaliable commands
     void displayCommands() {
         std::map<std::string, std::function<void()>> cmds = cmdManager.getCommandsList();
         logManager.addLog(defaultFont, "------All Currently Avaliable Commands------", sf::Color::White);
@@ -766,13 +767,14 @@ class SFMLConsole {
         
         closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
         titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
-
-        logManager.addLog(defaultFont, "Console initialized gjfdso ghjfsdkjghfkjdsghfdksjghfdjkshgfdkljshgfkdlshgkfd kjsfdjkghfsdjkghfdjk  ghfkdjsgh kfdshg jkfdshgkjfdhs kjgfdkjgsdfkj ghfdksjg hfkjdshgkfjdsh gfkdshgkfdshgdfslgkj", sf::Color::Green);
+	// Default Logs that are printed upon creation, if you dont want these, just remove them.
         logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
-        logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
-        logManager.addLog(defaultFont, "Console initialized", sf::Color::Red);
+        logManager.addLog(defaultFont, "Welcome to sfml-console", sf::Color::Green);
+        logManager.addLog(defaultFont, "For More information, type 'about' or go to https://github.com/clearlyyy/sfml-console and read the README.md", sf::Color::Cyan);
+	logManager.addLog(defaultFont, "Type 'help' to view avaliable commands", sf::Color::Yellow);
 
-        cmdManager.addCommand("clear", std::bind(&ConsoleLogView::clear, &logManager));
+	// Pre-defined commands, if you dont want these, just remove them.
+        cmdManager.addCommand("clear", std::bind(&ConsoleLogView::clear, &logManager)); 
         cmdManager.addCommand("help", std::bind(&SFMLConsole::displayCommands, this));
 
     }
@@ -790,7 +792,7 @@ class SFMLConsole {
             // Stop dragging when left mouse is released
             draggingConsole = false;
         }
-    
+	
         // Move titleBar if dragging
         // Probably will simplify this as its pretty fucked.
         if (draggingConsole) {
@@ -845,15 +847,24 @@ class SFMLConsole {
 
     // Draw the Console, place this at the very top of your scene, otherwise your game may be drawn over it.
     void Draw(sf::RenderWindow& window) {
-        window.draw(bg);
+	  if (isVisible) {
+	    window.draw(bg);
         logManager.DrawConsoleLog(window, bg, inputHeight, titleBarHeight);
         window.draw(titleBar);
         window.draw(titleText);
         window.draw(closeButton);
-        inputObj.Draw(window);  
+        inputObj.Draw(window);
+	  }
     }
 
-    
+    bool isConsoleVisible() {
+        return isVisible;
+    }
+
+    void setVisiblity(bool isConsoleVisible) {
+      isVisible = isConsoleVisible;
+    }
+  
     // Public CMD Functions
     void addCommand(std::string cmd, std::function<void()> func) {
         cmdManager.addCommand(cmd, func);
