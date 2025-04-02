@@ -1,0 +1,12 @@
+[
+    {
+      "directory": "C:/Users/clearly/Desktop/Code/sfml-console",
+      "command": "g++ -IC:/SFML-2.6.2/include -std=c++17 -c main.cpp",
+      "file": "main.cpp"
+    },
+    {
+      "directory": "C:/Users/clearly/Desktop/Code/sfml-console",
+      "command": "g++ main.o -o main -LC:/SFML-2.6.2/lib -lmingw32 -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -lsfml-network",
+      "file": "main.o"
+    }
+]

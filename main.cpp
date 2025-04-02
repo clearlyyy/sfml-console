@@ -2,6 +2,11 @@
 
 #include "SFMLConsole.hpp"
 
+
+void changeBGColor(sf::Color& color) {
+	color = sf::Color::Green;
+}
+
 int main()
 {
 
@@ -10,7 +15,10 @@ int main()
     sf::CircleShape shape(100.f);
     shape.setFillColor(sf::Color::Green);
 
-    SFMLConsole console;
+    SFMLConsole console(window);
+	sf::Color bgColor = sf::Color(159,228,237);
+
+	console.addCommand("changeColor", std::bind(changeBGColor, std::ref(bgColor)));
 
     while (window.isOpen())
     {
@@ -26,7 +34,7 @@ int main()
         console.Update(nullptr, window);
 
 
-        window.clear(sf::Color(159, 228, 237));
+        window.clear(bgColor);
         //window.draw(shape);
         console.Draw(window);
         window.display();

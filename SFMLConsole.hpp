@@ -1,3 +1,5 @@
+#include "SFML/Graphics/RectangleShape.hpp"
+#include "SFML/Window/Keyboard.hpp"
 #include <SFML/Graphics.hpp>
 #include <iostream>
 #include <deque>
@@ -13,7 +15,6 @@ class InputBox {
         sf::Cursor textCursor;
         sf::Cursor defaultCursor;
         bool cursorLoaded = false;
-
         sf::Clock m_repeatClock;
         float m_repeatDelay = 0.3f;
         float m_repeatSpeed = 0.05f;
@@ -25,7 +26,7 @@ class InputBox {
         bool m_caretVisible = false;
         const float m_caretBlinkInterval = 0.5f;
         size_t m_caretPosition = 0;
-
+	
         size_t m_selectionStart = 0;
         size_t m_selectionEnd = 0;
         size_t m_selectionAnchor = 0;
@@ -41,7 +42,7 @@ class InputBox {
             }
             m_caret.setPosition(caretX, text.getPosition().y);
         }
-
+	
         void processKeyInput(sf::Uint32 unicode) {
             if (hasSelection() && (unicode == '\b' || unicode == 127)) {
                 deleteSelectedText();
@@ -574,7 +575,7 @@ class ConsoleLogView {
 
         if (size.y < LINE_HEIGHT) size.y = LINE_HEIGHT;
     }
-    
+
     void addLog(sf::Font& font, const std::string& message, sf::Color color) {
         auto lines = splitLongText(message, font, 16);
 
@@ -679,7 +680,12 @@ class CommandManager {
 
 class SFMLConsole {
     private:
-
+	
+	bool floating = true;
+	
+	sf::Keyboard::Key openConsoleKey = sf::Keyboard::Tilde;
+	sf::Clock openConsoleClock;
+	bool didConsoleJustOpen = false;
     bool isVisible = true;
     CommandManager cmdManager;
 
@@ -704,7 +710,7 @@ class SFMLConsole {
 
     float inputPadding = 10.0f;
     ConsoleLogView logManager;
-
+   
     void executeCommand(const std::string& name) {
         std::map<std::string, std::function<void()>> cmds = cmdManager.getCommandsList();
         auto it = cmds.find(name);
@@ -715,7 +721,7 @@ class SFMLConsole {
         }
     }
 
-  // Display all avaliable commands
+    // Display all avaliable commands
     void displayCommands() {
         std::map<std::string, std::function<void()>> cmds = cmdManager.getCommandsList();
         logManager.addLog(defaultFont, "------All Currently Avaliable Commands------", sf::Color::White);
@@ -725,13 +731,18 @@ class SFMLConsole {
     }
 
     public:
-    
     // Constructor 
-    SFMLConsole() 
+    SFMLConsole(sf::RenderWindow &window) 
      : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)),
        logManager(defaultConsolePosition, sf::Vector2f(consoleSize.x, consoleSize.y - titleBarHeight - inputHeight - 5)) {
-        
 
+		if (!floating) {
+			consoleSize = sf::Vector2f(window.getSize().x, consoleSize.y);
+			defaultConsolePosition = sf::Vector2f(0,0);	
+			logManager.setSize(sf::Vector2f(window.getSize().x, consoleSize.y));
+		}
+		logManager.setPosition(defaultConsolePosition);
+		openConsoleClock.restart();
         bg.setSize(consoleSize);
         bg.setPosition(defaultConsolePosition);
         bg.setFillColor(sf::Color(56, 56, 56));
@@ -767,13 +778,13 @@ class SFMLConsole {
         
         closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
         titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
-	// Default Logs that are printed upon creation, if you dont want these, just remove them.
+    // Default Logs that are printed upon creation, if you dont want these, just remove them.
         logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
         logManager.addLog(defaultFont, "Welcome to sfml-console", sf::Color::Green);
         logManager.addLog(defaultFont, "For More information, type 'about' or go to https://github.com/clearlyyy/sfml-console and read the README.md", sf::Color::Cyan);
-	logManager.addLog(defaultFont, "Type 'help' to view avaliable commands", sf::Color::Yellow);
+    logManager.addLog(defaultFont, "Type 'help' to view avaliable commands", sf::Color::Yellow);
 
-	// Pre-defined commands, if you dont want these, just remove them.
+    // Pre-defined commands, if you dont want these, just remove them.
         cmdManager.addCommand("clear", std::bind(&ConsoleLogView::clear, &logManager)); 
         cmdManager.addCommand("help", std::bind(&SFMLConsole::displayCommands, this));
 
@@ -781,80 +792,100 @@ class SFMLConsole {
 
     // Update Function, place this inside your event loop, otherwise use a nullptr for event.
     void Update(sf::Event* event, sf::RenderWindow& window) {
-        // Check if left mouse button is pressed
-        if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-            if (!draggingConsole && titleBar.getGlobalBounds().contains(sf::Vector2f(sf::Mouse::getPosition(window)))) {
-                // Start dragging and calculate the initial offset
-                draggingConsole = true;
-                offset = bg.getPosition() - sf::Vector2f(sf::Mouse::getPosition(window));
-            }
-        } else {
-            // Stop dragging when left mouse is released
-            draggingConsole = false;
-        }
-	
-        // Move titleBar if dragging
-        // Probably will simplify this as its pretty fucked.
-        if (draggingConsole) {
-            bg.setPosition(sf::Vector2f(sf::Mouse::getPosition(window)) + offset);
-            titleBar.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y  ));
-            //input.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y + consoleSize.y));
-            closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
-            titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
-            logManager.setPosition(bg.getPosition());
 
-            inputObj.setSize(sf::Vector2f(
-                bg.getSize().x, //- 2 * inputPadding,
-                inputHeight //- 2 * inputPadding
-            ));
-            inputObj.setPosition(sf::Vector2f(
-                bg.getPosition().x, //+ inputPadding,
-                bg.getPosition().y + consoleSize.y - inputHeight //+ inputPadding
-            ));
+		// Open/Close the console with openConsoleKey, default is tilde.
+		if (sf::Keyboard::isKeyPressed(openConsoleKey)) {
+			if (openConsoleClock.getElapsedTime().asSeconds() > 0.1 && !didConsoleJustOpen) {				
+				isVisible = !isVisible;
+				didConsoleJustOpen = true;
+				openConsoleClock.restart();
+			}
+			
+		} else {
+			didConsoleJustOpen = false;
+		}
+		
+		if (isVisible) {
 
-        }
-        
-        if (event) {
-            inputObj.handleEvent(*event, window);
-            
-            if (event->type == sf::Event::TextEntered) {
-                m_textInputActive = true;
-            }
+			// Check if left mouse button is pressed
+			if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
+				if (!draggingConsole && titleBar.getGlobalBounds().contains(sf::Vector2f(sf::Mouse::getPosition(window)))) {
+					// Start dragging and calculate the initial offset
+					draggingConsole = true;
+					offset = bg.getPosition() - sf::Vector2f(sf::Mouse::getPosition(window));
+				}
+				if (closeButton.getGlobalBounds().contains(static_cast<sf::Vector2f>(sf::Mouse::getPosition(window)))) {
+					isVisible = false;
+				}
 
-            if (event->type == sf::Event::KeyPressed && event->key.code == sf::Keyboard::Enter) {
-                std::string enteredText = inputObj.getText();
-                logManager.addLog(defaultFont, enteredText, sf::Color::White);
-                inputObj.clearText();
+			} else {
+				// Stop dragging when left mouse is released
+				draggingConsole = false;
+			}
 
-                //Try to run command.
-                executeCommand(enteredText);
+			// Move titleBar if dragging
+			// Probably will simplify this as its pretty fucked.
+			if (draggingConsole) {
+				bg.setPosition(sf::Vector2f(sf::Mouse::getPosition(window)) + offset);
+				titleBar.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y  ));
+				//input.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y + consoleSize.y));
+				closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
+				titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
+				logManager.setPosition(bg.getPosition());
 
-            }
+				inputObj.setSize(sf::Vector2f(
+					bg.getSize().x,
+					inputHeight //- 2 * inputPadding
+				));
+				inputObj.setPosition(sf::Vector2f(
+					bg.getPosition().x, //+ inputPadding,
+					bg.getPosition().y + consoleSize.y - inputHeight //+ inputPadding
+				));
 
-            if (event->type == sf::Event::MouseWheelScrolled) {
-                logManager.handleScroll(event->mouseWheelScroll.delta);
-            }
-        }
+			}
 
-        inputObj.Update(window);
+			if (event) {
+				inputObj.handleEvent(*event, window);
 
-        if (!sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Unknown)) {
-            m_textInputActive = false;
-        }
+				if (event->type == sf::Event::TextEntered) {
+					m_textInputActive = true;
+				}
+
+				if (event->type == sf::Event::KeyPressed && event->key.code == sf::Keyboard::Enter) {
+					std::string enteredText = inputObj.getText();
+					logManager.addLog(defaultFont, enteredText, sf::Color::White);
+					inputObj.clearText();
+
+					//Try to run command.
+					executeCommand(enteredText);
+
+				}
+
+				if (event->type == sf::Event::MouseWheelScrolled) {
+					logManager.handleScroll(event->mouseWheelScroll.delta);
+				}
+			}
+
+			inputObj.Update(window);
+
+			if (!sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Unknown)) {
+				m_textInputActive = false;
+			}
+			}
 
     }
 
 
     // Draw the Console, place this at the very top of your scene, otherwise your game may be drawn over it.
     void Draw(sf::RenderWindow& window) {
-	  if (isVisible) {
-	    window.draw(bg);
+      if (isVisible) {
+        window.draw(bg);
         logManager.DrawConsoleLog(window, bg, inputHeight, titleBarHeight);
         window.draw(titleBar);
         window.draw(titleText);
         window.draw(closeButton);
         inputObj.Draw(window);
-	  }
+      }
     }
 
     bool isConsoleVisible() {
