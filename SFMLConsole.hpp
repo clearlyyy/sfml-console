@@ -667,15 +667,16 @@ class ConsoleLogView {
 /// @brief Handles and stores commands.
 class CommandManager {
     public:
-        std::map<std::string, std::function<void()>> commands;
+	//Average c++ definition
+	std::map<std::string, std::function<void(std::vector<std::string>)>> commands;
 
-        std::map<std::string, std::function<void()>> getCommandsList() {
+	std::map<std::string, std::function<void(std::vector<std::string>)>>& getCommandsList() {
             return commands;
-        }
+    }
         
-        void addCommand(const std::string& name, std::function<void()> func) {
+	void addCommand(const std::string& name, std::function<void(std::vector<std::string>)> func) {
             commands[name] = func;
-        }
+    }
 };
 
 class SFMLConsole {
@@ -711,19 +712,20 @@ class SFMLConsole {
     float inputPadding = 10.0f;
     ConsoleLogView logManager;
    
-    void executeCommand(const std::string& name) {
-        std::map<std::string, std::function<void()>> cmds = cmdManager.getCommandsList();
-        auto it = cmds.find(name);
-        if (it != cmds.end()) {
-            it->second();
-        } else {
+    void executeCommand(const std::string& name, const std::vector<std::string>& args) {
+        const auto& cmds = cmdManager.getCommandsList();
+        if (cmds.find(name) != cmds.end()) {
+			std::cout << "Command Found: " << name << std::endl;
+			cmds.at(name)(args);
+        }        
+        else {
             logManager.addLog(defaultFont, "Command not found, type 'help' to see a list of avaliable commands.", sf::Color(227, 100, 100) );
         }
     }
 
     // Display all avaliable commands
     void displayCommands() {
-        std::map<std::string, std::function<void()>> cmds = cmdManager.getCommandsList();
+        std::map<std::string, std::function<void(std::vector<std::string>)>> cmds = cmdManager.getCommandsList();
         logManager.addLog(defaultFont, "------All Currently Avaliable Commands------", sf::Color::White);
         for (const auto& pair : cmds) {
             logManager.addLog(defaultFont, pair.first, sf::Color::White);
@@ -792,7 +794,6 @@ class SFMLConsole {
 
     // Update Function, place this inside your event loop, otherwise use a nullptr for event.
     void Update(sf::Event* event, sf::RenderWindow& window) {
-
 		// Open/Close the console with openConsoleKey, default is tilde.
 		if (sf::Keyboard::isKeyPressed(openConsoleKey)) {
 			if (openConsoleClock.getElapsedTime().asSeconds() > 0.1 && !didConsoleJustOpen) {				
@@ -853,12 +854,22 @@ class SFMLConsole {
 
 				if (event->type == sf::Event::KeyPressed && event->key.code == sf::Keyboard::Enter) {
 					std::string enteredText = inputObj.getText();
-					logManager.addLog(defaultFont, enteredText, sf::Color::White);
 					inputObj.clearText();
+   					// Split entered text into command and arguments
+   					std::istringstream stream(enteredText);
+                    std::string command;
+                    stream >> command; // First word is the command
 
-					//Try to run command.
-					executeCommand(enteredText);
+					logManager.addLog(defaultFont, command, sf::Color::White);
+                    std::vector<std::string> args;
+                    std::string arg;
 
+					while (stream >> arg) { // The rest are arguments
+						args.push_back(arg);
+					}
+                                          
+                    //Try to run the command.
+                    executeCommand(command, args);                                        
 				}
 
 				if (event->type == sf::Event::MouseWheelScrolled) {
@@ -897,8 +908,12 @@ class SFMLConsole {
     }
   
     // Public CMD Functions
-    void addCommand(std::string cmd, std::function<void()> func) {
+    void addCommand(std::string cmd, std::function<void(std::vector<std::string>)> func) {
         cmdManager.addCommand(cmd, func);
     }
+
+    void log(std::string log, sf::Color color) {
+		logManager.addLog(defaultFont, log, color);
+	}      
     
 };

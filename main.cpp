@@ -3,8 +3,18 @@
 #include "SFMLConsole.hpp"
 
 
-void changeBGColor(sf::Color& color) {
-	color = sf::Color::Green;
+void changeBGColor(std::vector<std::string> args, SFMLConsole& console, sf::Color& bgColor) {
+	if (args.size() >= 3) {
+		int r = std::stoi(args[0]);
+		int g = std::stoi(args[1]);
+		int b = std::stoi(args[2]);
+		console.log("Changed Color to:" + std::to_string(r) + " " + std::to_string(g) + " " + std::to_string(b) + ".", sf::Color(r,g,b));
+		bgColor = sf::Color(r,g,b);
+	}
+	else {
+		console.log("Command must have 3 parameters: r, g, b. eg. changeColor 255 147 244", sf::Color(163, 75, 72));
+	}
+
 }
 
 int main()
@@ -18,8 +28,11 @@ int main()
     SFMLConsole console(window);
 	sf::Color bgColor = sf::Color(159,228,237);
 
-	console.addCommand("changeColor", std::bind(changeBGColor, std::ref(bgColor)));
 
+	console.addCommand("changeColor", [&](std::vector<std::string> args) {
+        changeBGColor(args, console, bgColor);
+    });
+	
     while (window.isOpen())
     {
         sf::Event event;
