@@ -1,3 +1,9 @@
+// Clearly
+// SFML-CONSOLE - Header only Console Library for SFML.
+// For more information or help, checkout the documentation at https://github.com/clearlyyy/sfml-console
+
+#pragma once
+
 #include "SFML/Graphics/RectangleShape.hpp"
 #include "SFML/Window/Keyboard.hpp"
 #include <SFML/Graphics.hpp>
@@ -235,6 +241,7 @@ class InputBox {
                     // Initialize selection - track initial position
                     m_selectionStart = m_caretPosition;
                     m_selectionEnd = m_caretPosition;
+					m_selectionAnchor = m_caretPosition;
                     m_isSelecting = true;
                     
                     return;
@@ -260,9 +267,11 @@ class InputBox {
                 if (newCaretPos < m_selectionStart) {
                     // Dragging left
                     m_selectionStart = newCaretPos;
+					m_selectionEnd = m_selectionAnchor;
                 } 
                 else {
                     // Dragging right
+					m_selectionStart = m_selectionAnchor;
                     m_selectionEnd = newCaretPos;
                 }
             }
@@ -668,19 +677,23 @@ class ConsoleLogView {
 class CommandManager {
     public:
 	//Average c++ definition
-	std::map<std::string, std::function<void(std::vector<std::string>)>> commands;
+	std::map<std::string, std::function<void(const std::vector<std::string>&)>> commands;
 
-	std::map<std::string, std::function<void(std::vector<std::string>)>>& getCommandsList() {
+	std::map<std::string, std::function<void(const std::vector<std::string>&)>>& getCommandsList() {
             return commands;
     }
         
-	void addCommand(const std::string& name, std::function<void(std::vector<std::string>)> func) {
+	void addCommand(const std::string& name, std::function<void(const std::vector<std::string>&)> func) {
             commands[name] = func;
     }
 };
 
 class SFMLConsole {
     private:
+	
+	static SFMLConsole* instance;
+
+	sf::RenderWindow* window = nullptr;
 	
 	bool floating = true;
 	
@@ -719,22 +732,21 @@ class SFMLConsole {
 			cmds.at(name)(args);
         }        
         else {
-            logManager.addLog(defaultFont, "Command not found, type 'help' to see a list of avaliable commands.", sf::Color(227, 100, 100) );
+            logManager.addLog(defaultFont, "Command not found, type 'help' to see a list of available commands.", sf::Color(227, 100, 100) );
         }
     }
 
-    // Display all avaliable commands
+    // Display all available commands
     void displayCommands() {
-        std::map<std::string, std::function<void(std::vector<std::string>)>> cmds = cmdManager.getCommandsList();
-        logManager.addLog(defaultFont, "------All Currently Avaliable Commands------", sf::Color::White);
+        std::map<std::string, std::function<void(const std::vector<std::string>&)>> cmds = cmdManager.getCommandsList();
+        logManager.addLog(defaultFont, "------All Currently Available Commands------", sf::Color::Green);
         for (const auto& pair : cmds) {
             logManager.addLog(defaultFont, pair.first, sf::Color::White);
         }
     }
 
-    public:
-    // Constructor 
-    SFMLConsole(sf::RenderWindow &window) 
+	// Constructor 
+    SFMLConsole(sf::RenderWindow &window, bool disableStartupLogs = false) 
      : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)),
        logManager(defaultConsolePosition, sf::Vector2f(consoleSize.x, consoleSize.y - titleBarHeight - inputHeight - 5)) {
 
@@ -780,18 +792,46 @@ class SFMLConsole {
         
         closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
         titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
-    // Default Logs that are printed upon creation, if you dont want these, just remove them.
-        logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
-        logManager.addLog(defaultFont, "Welcome to sfml-console", sf::Color::Green);
-        logManager.addLog(defaultFont, "For More information, type 'about' or go to https://github.com/clearlyyy/sfml-console and read the README.md", sf::Color::Cyan);
-    logManager.addLog(defaultFont, "Type 'help' to view avaliable commands", sf::Color::Yellow);
-
-    // Pre-defined commands, if you dont want these, just remove them.
+    // Default Logs that are printed upon creation, if you dont want these, set disableStartupLogs to true
+		if (!disableStartupLogs) {
+			logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
+			logManager.addLog(defaultFont, "Welcome to sfml-console", sf::Color::Green);
+			logManager.addLog(defaultFont, "For More information, type 'about' or go to https://github.com/clearlyyy/sfml-console and read the README.md", sf::Color::Cyan);
+			logManager.addLog(defaultFont, "To disable these logs, set disableStartupLogs to true in the SFMLConsole Constructor", sf::Color::Magenta);
+			logManager.addLog(defaultFont, "Type 'help' to view available commands", sf::Color::Yellow);
+		}
+		
+		// Pre-defined commands, if you dont want these, just remove them.
         cmdManager.addCommand("clear", std::bind(&ConsoleLogView::clear, &logManager)); 
         cmdManager.addCommand("help", std::bind(&SFMLConsole::displayCommands, this));
 
     }
 
+
+	
+    public:
+
+	//Create the console object.
+	static SFMLConsole& createInstance(sf::RenderWindow& window, bool disableStartupLogs = false) {
+		if (instance == nullptr) {
+			instance = new SFMLConsole(window, disableStartupLogs);
+		}
+		return *instance;
+	}
+	//Retrieve the console object.
+	static SFMLConsole& getInstance() {
+		if (instance == nullptr) {
+			throw std::runtime_error("SFMLConsole has not been initialized, use createInstance to create it.");
+		}
+		return *instance;
+	}
+
+	//Destroy the instance of the console. 
+	static void destroyInstance() {
+		delete instance;
+		instance = nullptr;
+	}
+	
     // Update Function, place this inside your event loop, otherwise use a nullptr for event.
     void Update(sf::Event* event, sf::RenderWindow& window) {
 		// Open/Close the console with openConsoleKey, default is tilde.
@@ -914,6 +954,7 @@ class SFMLConsole {
 
     void log(std::string log, sf::Color color) {
 		logManager.addLog(defaultFont, log, color);
-	}      
-    
+	}
 };
+
+inline SFMLConsole* SFMLConsole::instance = nullptr;

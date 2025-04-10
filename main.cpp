@@ -3,7 +3,8 @@
 #include "SFMLConsole.hpp"
 
 
-void changeBGColor(std::vector<std::string> args, SFMLConsole& console, sf::Color& bgColor) {
+void changeBGColor(std::vector<std::string> args, sf::Color& bgColor) {
+	SFMLConsole& console = SFMLConsole::getInstance();
 	if (args.size() >= 3) {
 		int r = std::stoi(args[0]);
 		int g = std::stoi(args[1]);
@@ -14,7 +15,6 @@ void changeBGColor(std::vector<std::string> args, SFMLConsole& console, sf::Colo
 	else {
 		console.log("Command must have 3 parameters: r, g, b. eg. changeColor 255 147 244", sf::Color(163, 75, 72));
 	}
-
 }
 
 int main()
@@ -25,13 +25,17 @@ int main()
     sf::CircleShape shape(100.f);
     shape.setFillColor(sf::Color::Green);
 
-    SFMLConsole console(window);
+    SFMLConsole& console = SFMLConsole::createInstance(window);
 	sf::Color bgColor = sf::Color(159,228,237);
 
+	//No Variables need to be passed in
+	//console.addCommand("changeColor", changeBGColor);
 
+	//bgColor needs to be passed in
 	console.addCommand("changeColor", [&](std::vector<std::string> args) {
-        changeBGColor(args, console, bgColor);
-    });
+		changeBGColor(args, bgColor);
+	});
+	
 	
     while (window.isOpen())
     {
@@ -43,7 +47,6 @@ int main()
 
             console.Update(&event, window);
         }
-
         console.Update(nullptr, window);
 
 
