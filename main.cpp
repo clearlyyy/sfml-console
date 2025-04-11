@@ -36,7 +36,17 @@ int main()
     SFMLConsole& console = SFMLConsole::createInstance(window);
 	sf::Color bgColor = sf::Color(159,228,237);
 
-	
+	//fps counter
+	sf::Clock clock;
+	sf::Clock fpsClock;
+	float lastTime = 0;
+	sf::Text fpsCounter;
+	sf::Font font;
+	font.loadFromFile("Tektur-Bold.ttf");
+	fpsCounter.setFont(font);
+	fpsCounter.setPosition(40,40);
+	fpsCounter.setCharacterSize(30);
+	fpsCounter.setFillColor(sf::Color::Black);
 	//console.addCommand("changeColor", changeBGColor);
 
 	//bgColor needs to be passed in
@@ -46,6 +56,7 @@ int main()
 
     //No Variables need to be passed in
     console.addCommand("spam", spamConsole);
+
 	
 	
     while (window.isOpen())
@@ -59,11 +70,16 @@ int main()
             console.Update(&event, window);
         }
         console.Update(nullptr, window);
-
-
+		float currentTime = clock.restart().asSeconds();
+		float fps = 1.f / (currentTime - lastTime);
+		if (fpsClock.getElapsedTime().asSeconds() > 0.2) {
+			fpsCounter.setString("FPS: " + std::to_string(fps));
+			fpsClock.restart();
+		}
         window.clear(bgColor);
         //window.draw(shape);
         console.Draw(window);
+		window.draw(fpsCounter);
         window.display();
     }
 

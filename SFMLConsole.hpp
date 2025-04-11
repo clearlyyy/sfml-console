@@ -18,6 +18,8 @@
 
 class InputBox {
     private:
+	std::deque<std::string> pastInputs;
+	int currentPastInputIndex = 0;
     sf::Cursor textCursor;
     sf::Cursor defaultCursor;
     bool cursorLoaded = false;
@@ -344,6 +346,25 @@ class InputBox {
                 m_caretBlinkClock.restart();
                 m_caretVisible = true;
             }
+			else if (event.key.code == sf::Keyboard::Up) {
+				if (currentPastInputIndex < pastInputs.size() && pastInputs.size() > 1) {
+					inputString = pastInputs[currentPastInputIndex];
+					text.setString(pastInputs[currentPastInputIndex]);
+					currentPastInputIndex++;
+				}
+				
+			}
+			else if (event.key.code == sf::Keyboard::Down) {
+				if (currentPastInputIndex < pastInputs.size() && pastInputs.size() > 1) {
+					inputString = pastInputs[currentPastInputIndex];
+					text.setString(pastInputs[currentPastInputIndex]);
+				}
+				currentPastInputIndex--;
+				if (currentPastInputIndex < 0) {
+					currentPastInputIndex = 0;
+				}
+			}
+				
             else if (event.key.code == sf::Keyboard::Delete) {
                 if (hasSelection()) {
                     deleteSelectedText();
@@ -489,6 +510,17 @@ class InputBox {
         text.setString(inputString);
         updateCaretPosition();
     }
+
+	void addToPastInputs(std::string msg) {
+		pastInputs.push_front(msg);
+		if (pastInputs.size() > 30) {
+			pastInputs.pop_back();
+		}
+	}
+
+	void setCurrentPastInputsIndex(int num) {
+		currentPastInputIndex = 0;
+	}
         
 };
 
@@ -566,7 +598,7 @@ class ConsoleLogView {
 	void regenerateVisibleTexts(sf::Font& font) {
 		visibleTexts.clear();
 		float maxWidth = size.x - 2 * PADDING;
-		float yOffset = position.y + TOP_MARGIN + 16;
+		float yOffset = position.y + TOP_MARGIN +16;
 		size_t currentGlobalLine = 0;
 		float currentScroll = scrollOffset;
 
@@ -1159,6 +1191,9 @@ class SFMLConsole {
 
 				if (event->type == sf::Event::KeyPressed && event->key.code == sf::Keyboard::Enter) {
 					std::string enteredText = inputObj.getText();
+					inputObj.addToPastInputs(enteredText);
+					inputObj.setCurrentPastInputsIndex(0);
+					
 					inputObj.clearText();
    					// Split entered text into command and arguments
    					std::istringstream stream(enteredText);
