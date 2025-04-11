@@ -502,13 +502,15 @@ class ConsoleLogView {
         float lastWrapWidth = 0;
     };
 
+	float contentHeight;
+	
     std::deque<LogEntry> logEntries;
     std::vector<sf::Text> visibleTexts;
     sf::Vector2f position;
     sf::Vector2f size;
     float scrollOffset = 0.0f;
     const float SCROLL_SPEED = 40.0f;
-    const size_t MAX_LOGS = 500;
+    size_t MAX_LOGS = 500;
     const float LINE_HEIGHT = 20.0f;
     const float PADDING = 10.0f;
     bool autoScroll = true;
@@ -517,11 +519,11 @@ class ConsoleLogView {
     size_t totalLines = 0;
     const float TOP_MARGIN = 10.0f; 
 
-    std::vector<std::string> wrapText(const std::string& message, sf::Font& font, float maxWidth) {
+    std::vector<std::string> wrapText(const std::string& message, sf::Font& font, float maxWidth, float charSize) {
         std::vector<std::string> lines;
         if (message.empty() || maxWidth <= 0) return lines;
 
-        const sf::Glyph& spaceGlyph = font.getGlyph(' ', 16, false);
+        const sf::Glyph& spaceGlyph = font.getGlyph(' ', charSize, false);
         float spaceAdvance = spaceGlyph.advance;
         float currentLineWidth = 0;
         size_t lineStart = 0;
@@ -529,7 +531,7 @@ class ConsoleLogView {
 
         for (size_t i = 0; i < message.length(); i++) {
             char c = message[i];
-            const sf::Glyph& glyph = font.getGlyph(c, 16, false);
+            const sf::Glyph& glyph = font.getGlyph(c, charSize, false);
             float charWidth = glyph.advance;
 
             if (c == ' ' || c == '\t') {
@@ -561,53 +563,73 @@ class ConsoleLogView {
         return lines;
     }
 
-    void regenerateVisibleTexts(sf::Font& font) {
-        visibleTexts.clear();
-        float maxWidth = size.x - 2 * PADDING;
+	void regenerateVisibleTexts(sf::Font& font) {
+		visibleTexts.clear();
+		float maxWidth = size.x - 2 * PADDING;
+		float yOffset = position.y + TOP_MARGIN + 16;
+		size_t currentGlobalLine = 0;
+		float currentScroll = scrollOffset;
 
-        // Calculate visible range
-        size_t firstVisibleLine = static_cast<size_t>(scrollOffset / LINE_HEIGHT);
-        size_t maxVisibleLines = static_cast<size_t>((size.y - TOP_MARGIN) / LINE_HEIGHT) + 2;
-        size_t lastVisibleLine = std::min(totalLines, firstVisibleLine + maxVisibleLines);
+		contentHeight = 0.0f; // Reset and compute total log height
 
-        // Find starting position in logEntries
-        size_t currentGlobalLine = 0;
-        float yOffset = position.y + TOP_MARGIN - (scrollOffset - firstVisibleLine * LINE_HEIGHT);
+		// First pass: calculate full content height (all lines)
+		for (const auto& entry : logEntries) {
+			for (const auto& line : entry.wrappedLines) {
+				sf::Text tempText;
+				tempText.setFont(font);
+				tempText.setString(line);
+				tempText.setCharacterSize(entry.charSize);
+				float lineHeight = tempText.getLocalBounds().height + 4;
+				contentHeight += lineHeight;
+			}
+		}
 
-        for (const auto& entry : logEntries) {
-            if (currentGlobalLine + entry.wrappedLines.size() <= firstVisibleLine) {
-                currentGlobalLine += entry.wrappedLines.size();
-                continue;
-            }
+        //Small margin for text at bottom of the console
+        contentHeight += 20;
 
-            for (const auto& line : entry.wrappedLines) {
-                if (currentGlobalLine >= firstVisibleLine && currentGlobalLine <= lastVisibleLine) {
-                    sf::Text text;
-                    text.setFont(font);
-                    text.setString(line);
-                    text.setCharacterSize(entry.charSize);
-                    text.setFillColor(entry.color);
-                    text.setPosition(position.x + PADDING, yOffset);
-                    visibleTexts.push_back(text);
-                }
-
-                yOffset += LINE_HEIGHT;
-                currentGlobalLine++;
-
-                if (currentGlobalLine > lastVisibleLine) {
-                    break;
-                }
-            }
-
-            if (currentGlobalLine > lastVisibleLine) {
-                break;
-            }
+        if (autoScroll) {
+            float maxScroll = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
+            scrollOffset = maxScroll;
         }
 
-        needsRedraw = false;
-    }
+		yOffset = position.y + TOP_MARGIN + 16;
+		currentScroll = scrollOffset;
 
-    public:
+        
+
+		// Second pass: generate visible texts
+		for (const auto& entry : logEntries) {
+			for (const auto& line : entry.wrappedLines) {
+				sf::Text text;
+				text.setFont(font);
+				text.setString(line);
+				text.setCharacterSize(entry.charSize);
+				text.setFillColor(entry.color);
+
+				float lineHeight = text.getLocalBounds().height + 4;
+
+				if (currentScroll > lineHeight) {
+					currentScroll -= lineHeight;
+					currentGlobalLine++;
+					continue;
+				}
+
+				if (yOffset > position.y + size.y) {
+					return; // done rendering what's visible
+				}
+
+				text.setPosition(position.x + PADDING, yOffset - currentScroll);
+				visibleTexts.push_back(text);
+				yOffset += lineHeight;
+				currentScroll = 0;
+				currentGlobalLine++;
+			}
+		}
+
+		needsRedraw = false;
+	}
+
+public:
     ConsoleLogView(sf::Vector2f pos, sf::Vector2f sz) : position(pos), size(sz) {
         if (size.y < LINE_HEIGHT) size.y = LINE_HEIGHT;
     }
@@ -622,7 +644,7 @@ class ConsoleLogView {
 
         for (auto& entry : logEntries) {
             if (std::abs(entry.lastWrapWidth - maxWidth) > 1.0f) {
-                entry.wrappedLines = wrapText(entry.originalMessage, font, maxWidth);
+                entry.wrappedLines = wrapText(entry.originalMessage, font, maxWidth, entry.charSize);
                 entry.lastWrapWidth = maxWidth;
             }
             totalLines += entry.wrappedLines.size();
@@ -639,9 +661,9 @@ class ConsoleLogView {
         LogEntry newEntry;
         newEntry.originalMessage = message;
         newEntry.color = color;
-        newEntry.wrappedLines = wrapText(message, font, maxWidth);
-        newEntry.lastWrapWidth = maxWidth;
 		newEntry.charSize = charSize;
+        newEntry.wrappedLines = wrapText(message, font, maxWidth, newEntry.charSize);
+        newEntry.lastWrapWidth = maxWidth;
         logEntries.push_back(newEntry);
         totalLines += newEntry.wrappedLines.size();
 
@@ -651,16 +673,13 @@ class ConsoleLogView {
         }
 
         needsRedraw = true;
-        if (autoScroll) {
-            scrollToBottom();
-        }
+	
+        
     }
 
-    void handleScroll(float delta) {
+	void handleScroll(float delta) {
         autoScroll = false;
         scrollOffset -= delta * SCROLL_SPEED;
-        
-        float contentHeight = totalLines * LINE_HEIGHT;
         float maxScroll = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
         scrollOffset = std::clamp(scrollOffset, 0.0f, maxScroll);
         
@@ -672,8 +691,8 @@ class ConsoleLogView {
     }
 
     void scrollToBottom() {
-        float contentHeight = totalLines * LINE_HEIGHT;
-        scrollOffset = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
+		float maxScroll = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
+		scrollOffset = maxScroll;
         autoScroll = true;
         needsRedraw = true;
     }
@@ -706,6 +725,10 @@ class ConsoleLogView {
         totalLines = 0;
         needsRedraw = true;
         autoScroll = true;
+    }
+
+    void setMaxLogs(size_t MAX_LOGS) {
+        this->MAX_LOGS = MAX_LOGS;
     }
 };
 
@@ -743,6 +766,7 @@ class SFMLConsole {
 
 	static SFMLConsole* instance;
 
+	std::string titleStr = "SFML-CONSOLE";
 	sf::Cursor arrowCursor, hResizeCursor, vResizeCursor, diagResize1Cursor, diagResize2Cursor;
     resizeType activeResizeRegion = resizeType::NONE;
     sf::Vector2f resizeStartMousePos;
@@ -797,7 +821,7 @@ class SFMLConsole {
     // Display all available commands
     void displayCommands() {
         std::map<std::string, std::function<void(const std::vector<std::string>&)>> cmds = cmdManager.getCommandsList();
-        logManager.addLog(defaultFont, "------All Currently Available Commands------", sf::Color::Green);
+        logManager.addLog(defaultFont, "------All Currently Available Commands------", sf::Color::Green, 20);
         for (const auto& pair : cmds) {
             logManager.addLog(defaultFont, pair.first, sf::Color::White);
         }
@@ -839,7 +863,7 @@ class SFMLConsole {
             std::cout << "SFML-CONSOLE: ERROR LOADING defaultFont << std::endl" << std::endl;
         }
 
-        titleText.setString("SFML-CONSOLE");
+        titleText.setString(titleStr);
         titleText.setFont(defaultFont);
         titleText.setCharacterSize(16);
         titleText.setStyle(sf::Text::Bold);
@@ -854,9 +878,7 @@ class SFMLConsole {
 		vResizeCursor.loadFromSystem(sf::Cursor::SizeVertical);
 		diagResize1Cursor.loadFromSystem(sf::Cursor::SizeTopLeftBottomRight); // ↘↖
 		diagResize2Cursor.loadFromSystem(sf::Cursor::SizeBottomLeftTopRight); // ↙↗	
-
-
-        
+ 
         closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
         titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
 		// Default Logs that are printed upon creation, if you dont want these, set disableStartupLogs to true
@@ -864,7 +886,8 @@ class SFMLConsole {
 			logManager.addLog(defaultFont, "Console initialized", sf::Color::Green);
 			logManager.addLog(defaultFont, "Welcome to sfml-console", sf::Color::Green);
 			logManager.addLog(defaultFont, "For More information, type 'about' or go to https://github.com/clearlyyy/sfml-console and read the README.md", sf::Color::Cyan);
-			logManager.addLog(defaultFont, "To disable these logs, set disableStartupLogs to true in the SFMLConsole Constructor", sf::Color::Magenta);
+			logManager.addLog(defaultFont, "To disable these logs, set disableStartupLogs to true in SFMLConsole::createInstance()", sf::Color(235, 183, 42), 30);
+			logManager.addLog(defaultFont, "To set the title of the console, try SFMLConsole::setTitle()", sf::Color::White, 14); 
 			logManager.addLog(defaultFont, "Type 'help' to view available commands", sf::Color::Yellow);
 		}
 		
@@ -1197,6 +1220,18 @@ class SFMLConsole {
     void log(std::string log, sf::Color color, float charSize = 16) {
 		logManager.addLog(defaultFont, log, color, charSize);
 	}
+
+    //Set the Title of the console window
+	void setTitle(std::string title) {
+		titleStr = title;
+		titleText.setString(title);
+	}
+
+    // For Performance reasons, you may want to lower the maximum amount of logs in the console, by default it is 500.
+    void setMaxLogs(size_t MAX_LOGS) {
+        logManager.setMaxLogs(MAX_LOGS);
+    }
+
 };
 
 inline SFMLConsole* SFMLConsole::instance = nullptr;
