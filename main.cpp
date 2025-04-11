@@ -54,11 +54,12 @@ int main()
 		changeBGColor(args, bgColor);
 	});
 
+	console.setSizeY(300);
+	console.setBackgroundTransparency(200);
+
     //No Variables need to be passed in
     console.addCommand("spam", spamConsole);
 
-	
-	
     while (window.isOpen())
     {
         sf::Event event;

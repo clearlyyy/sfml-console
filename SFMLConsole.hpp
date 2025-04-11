@@ -15,6 +15,7 @@
 #include <map>
 #include <functional>
 #include <limits>
+#include <tgmath.h>
 
 class InputBox {
     private:
@@ -526,243 +527,340 @@ class InputBox {
 
 class ConsoleLogView {
     private:
-    struct LogEntry {
-        std::string originalMessage;
-        sf::Color color;
-		float charSize;
-        std::vector<std::string> wrappedLines;
+        struct LogEntry {
+            std::string originalMessage;
+            sf::Color color;
+            float charSize;
+            std::vector<std::string> wrappedLines;
+            float lastWrapWidth = 0;
+        };
+    
+        struct TextBatch {
+            sf::VertexArray vertices;
+            const sf::Texture* texture;
+            unsigned int fontSize;
+        };
+    
+        float contentHeight;
+        std::deque<LogEntry> logEntries;
+        std::vector<TextBatch> batchedTexts;
+        sf::Vector2f position;
+        sf::Vector2f size;
+        float scrollOffset = 0.0f;
+        const float SCROLL_SPEED = 40.0f;
+        size_t MAX_LOGS = 500;
+        const float LINE_HEIGHT = 20.0f;
+        const float PADDING = 10.0f;
+        bool autoScroll = true;
         float lastWrapWidth = 0;
-    };
-
-	float contentHeight;
-	
-    std::deque<LogEntry> logEntries;
-    std::vector<sf::Text> visibleTexts;
-    sf::Vector2f position;
-    sf::Vector2f size;
-    float scrollOffset = 0.0f;
-    const float SCROLL_SPEED = 40.0f;
-    size_t MAX_LOGS = 500;
-    const float LINE_HEIGHT = 20.0f;
-    const float PADDING = 10.0f;
-    bool autoScroll = true;
-    float lastWrapWidth = 0;
-    bool needsRedraw = true;
-    size_t totalLines = 0;
-    const float TOP_MARGIN = 10.0f; 
-
-    std::vector<std::string> wrapText(const std::string& message, sf::Font& font, float maxWidth, float charSize) {
-        std::vector<std::string> lines;
-        if (message.empty() || maxWidth <= 0) return lines;
-
-        const sf::Glyph& spaceGlyph = font.getGlyph(' ', charSize, false);
-        float spaceAdvance = spaceGlyph.advance;
-        float currentLineWidth = 0;
-        size_t lineStart = 0;
-        size_t lastSpace = std::string::npos;
-
-        for (size_t i = 0; i < message.length(); i++) {
-            char c = message[i];
-            const sf::Glyph& glyph = font.getGlyph(c, charSize, false);
-            float charWidth = glyph.advance;
-
-            if (c == ' ' || c == '\t') {
-                lastSpace = i;
-            }
-
-            if (currentLineWidth + charWidth > maxWidth) {
-                if (lastSpace != std::string::npos && lastSpace > lineStart) {
-                    lines.push_back(message.substr(lineStart, lastSpace - lineStart));
-                    lineStart = lastSpace + 1;
-                    i = lineStart;
-                    lastSpace = std::string::npos;
-                    currentLineWidth = 0;
-                } else {
-                    lines.push_back(message.substr(lineStart, i - lineStart));
-                    lineStart = i;
-                    lastSpace = std::string::npos;
-                    currentLineWidth = charWidth;
+        bool needsRedraw = true;
+        size_t totalLines = 0;
+        const float TOP_MARGIN = 10.0f;
+        
+        // Optimization parameters
+        const unsigned int MAX_FONT_SIZES = 8;
+        const unsigned int COLOR_QUANTIZATION = 16;
+    
+        sf::Color quantizeColor(const sf::Color& color, unsigned int levels) {
+            if (levels == 0) levels = 1;
+            float step = 255.0f / (levels - 1);
+            return sf::Color(
+                static_cast<sf::Uint8>(std::round(color.r / step) * step),
+                static_cast<sf::Uint8>(std::round(color.g / step) * step),
+                static_cast<sf::Uint8>(std::round(color.b / step) * step),
+                color.a
+            );
+        }
+    
+        unsigned int roundFontSize(unsigned int size) {
+            // Round to nearest multiple of 4 to reduce texture variations
+            return ((size + 2) / 4) * 4;
+        }
+    
+        std::vector<std::string> wrapText(const std::string& message, sf::Font& font, float maxWidth, float charSize) {
+            std::vector<std::string> lines;
+            if (message.empty() || maxWidth <= 0) return lines;
+    
+            const sf::Glyph& spaceGlyph = font.getGlyph(' ', charSize, false);
+            float spaceAdvance = spaceGlyph.advance;
+            float currentLineWidth = 0;
+            size_t lineStart = 0;
+            size_t lastSpace = std::string::npos;
+    
+            for (size_t i = 0; i < message.length(); i++) {
+                char c = message[i];
+                const sf::Glyph& glyph = font.getGlyph(c, charSize, false);
+                float charWidth = glyph.advance;
+    
+                if (c == ' ' || c == '\t') {
+                    lastSpace = i;
                 }
-            } else {
-                currentLineWidth += charWidth;
+    
+                if (currentLineWidth + charWidth > maxWidth) {
+                    if (lastSpace != std::string::npos && lastSpace > lineStart) {
+                        lines.push_back(message.substr(lineStart, lastSpace - lineStart));
+                        lineStart = lastSpace + 1;
+                        i = lineStart;
+                        lastSpace = std::string::npos;
+                        currentLineWidth = 0;
+                    } else {
+                        lines.push_back(message.substr(lineStart, i - lineStart));
+                        lineStart = i;
+                        lastSpace = std::string::npos;
+                        currentLineWidth = charWidth;
+                    }
+                } else {
+                    currentLineWidth += charWidth;
+                }
+            }
+    
+            if (lineStart < message.length()) {
+                lines.push_back(message.substr(lineStart));
+            }
+    
+            return lines;
+        }
+    
+        void regenerateVertexArray(sf::Font& font) {
+            batchedTexts.clear();
+            std::map<unsigned int, TextBatch> sizeBatches;
+    
+            float maxWidth = size.x - 2 * PADDING;
+            float yOffset = position.y + TOP_MARGIN + 16;
+            float currentScroll = scrollOffset;
+    
+            contentHeight = 0.0f;
+    
+            // First pass: calculate full content height
+            for (const auto& entry : logEntries) {
+                for (const auto& line : entry.wrappedLines) {
+                    sf::Text tempText;
+                    tempText.setFont(font);
+                    tempText.setString(line);
+                    tempText.setCharacterSize(entry.charSize);
+                    float lineHeight = tempText.getLocalBounds().height + 4;
+                    contentHeight += lineHeight;
+                }
+            }
+    
+            contentHeight += 20;
+    
+            if (autoScroll) {
+                float maxScroll = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
+                scrollOffset = maxScroll;
+            }
+    
+            yOffset = position.y + TOP_MARGIN + 16;
+            currentScroll = scrollOffset;
+    
+            // Second pass: generate batched vertices
+            for (const auto& entry : logEntries) {
+                unsigned int roundedSize = roundFontSize(entry.charSize);
+                sf::Color quantColor = quantizeColor(entry.color, COLOR_QUANTIZATION);
+    
+                for (const auto& line : entry.wrappedLines) {
+                    sf::Text tempText;
+                    tempText.setFont(font);
+                    tempText.setString(line);
+                    tempText.setCharacterSize(entry.charSize);
+                    float lineHeight = tempText.getLocalBounds().height + 4;
+    
+                    if (currentScroll > lineHeight) {
+                        currentScroll -= lineHeight;
+                        continue;
+                    }
+    
+                    if (yOffset > position.y + size.y) {
+                        break;
+                    }
+    
+                    // Get or create batch for this font size
+                    auto& batch = sizeBatches[roundedSize];
+                    if (batch.vertices.getVertexCount() == 0) {
+                        batch.vertices.setPrimitiveType(sf::Quads);
+                        batch.texture = &font.getTexture(roundedSize);
+                        batch.fontSize = roundedSize;
+                    }
+    
+                    // Create text for positioning
+                    sf::Text text;
+                    text.setFont(font);
+                    text.setString(line);
+                    text.setCharacterSize(entry.charSize);
+                    text.setFillColor(quantColor);
+                    text.setPosition(position.x + PADDING, yOffset - currentScroll);
+    
+                    // Convert to UTF-32
+                    sf::String sfmlString = sf::String::fromUtf8(line.begin(), line.end());
+                    const sf::Uint32* characters = sfmlString.getData();
+                    const std::size_t length = sfmlString.getSize();
+    
+                    const sf::Transform transform(text.getTransform());
+                    const sf::Uint32 style(text.getStyle());
+                    const float outlineThickness(text.getOutlineThickness());
+    
+                    float x = 0.f;
+                    float y = static_cast<float>(entry.charSize);
+    
+                    for (std::size_t i = 0; i < length; ++i) {
+                        sf::Uint32 currentChar = characters[i];
+                        
+                        if (currentChar == '\r') continue;
+                        
+                        if (currentChar == '\t') {
+                            const sf::Glyph& glyph = font.getGlyph(' ', entry.charSize, style & sf::Text::Bold, outlineThickness);
+                            x += glyph.advance * 4;
+                            continue;
+                        }
+                        
+                        const sf::Glyph& glyph = font.getGlyph(currentChar, entry.charSize, style & sf::Text::Bold, outlineThickness);
+                        
+                        float left = glyph.bounds.left;
+                        float top = glyph.bounds.top;
+                        float right = glyph.bounds.left + glyph.bounds.width;
+                        float bottom = glyph.bounds.top + glyph.bounds.height;
+                        
+                        batch.vertices.append(sf::Vertex(
+                            transform.transformPoint(x + left, y + top),
+                            quantColor,
+                            sf::Vector2f(glyph.textureRect.left, glyph.textureRect.top)
+                        ));
+                        batch.vertices.append(sf::Vertex(
+                            transform.transformPoint(x + right, y + top),
+                            quantColor,
+                            sf::Vector2f(glyph.textureRect.left + glyph.textureRect.width, glyph.textureRect.top)
+                        ));
+                        batch.vertices.append(sf::Vertex(
+                            transform.transformPoint(x + right, y + bottom),
+                            quantColor,
+                            sf::Vector2f(glyph.textureRect.left + glyph.textureRect.width, glyph.textureRect.top + glyph.textureRect.height)
+                        ));
+                        batch.vertices.append(sf::Vertex(
+                            transform.transformPoint(x + left, y + bottom),
+                            quantColor,
+                            sf::Vector2f(glyph.textureRect.left, glyph.textureRect.top + glyph.textureRect.height)
+                        ));
+                        
+                        x += glyph.advance;
+                    }
+    
+                    yOffset += lineHeight;
+                    currentScroll = 0;
+                }
+            }
+    
+            // Transfer batches to main vector
+            for (auto& pair : sizeBatches) {
+                if (pair.second.vertices.getVertexCount() > 0) {
+                    batchedTexts.push_back(std::move(pair.second));
+                }
+            }
+    
+            needsRedraw = false;
+        }
+    
+    public:
+        ConsoleLogView(sf::Vector2f pos, sf::Vector2f sz) : position(pos), size(sz) {
+            if (size.y < LINE_HEIGHT) size.y = LINE_HEIGHT;
+        }
+    
+        void handleResize(sf::Font& font) {
+            float newWidth = size.x;
+            if (std::abs(lastWrapWidth - newWidth) < 1.0f) return;
+    
+            lastWrapWidth = newWidth;
+            float maxWidth = newWidth - 2 * PADDING;
+            totalLines = 0;
+    
+            for (auto& entry : logEntries) {
+                if (std::abs(entry.lastWrapWidth - maxWidth) > 1.0f) {
+                    entry.wrappedLines = wrapText(entry.originalMessage, font, maxWidth, entry.charSize);
+                    entry.lastWrapWidth = maxWidth;
+                }
+                totalLines += entry.wrappedLines.size();
+            }
+    
+            needsRedraw = true;
+            if (autoScroll) {
+                scrollToBottom();
             }
         }
-
-        if (lineStart < message.length()) {
-            lines.push_back(message.substr(lineStart));
+    
+        void addLog(sf::Font& font, const std::string& message, sf::Color color, float charSize = 16) {
+            float maxWidth = size.x - 2 * PADDING;
+            LogEntry newEntry;
+            newEntry.originalMessage = message;
+            newEntry.color = quantizeColor(color, COLOR_QUANTIZATION);
+            newEntry.charSize = roundFontSize(charSize);
+            newEntry.wrappedLines = wrapText(message, font, maxWidth, newEntry.charSize);
+            newEntry.lastWrapWidth = maxWidth;
+            logEntries.push_back(newEntry);
+            totalLines += newEntry.wrappedLines.size();
+    
+            while (logEntries.size() > MAX_LOGS) {
+                totalLines -= logEntries.front().wrappedLines.size();
+                logEntries.pop_front();
+            }
+    
+            needsRedraw = true;
         }
-
-        return lines;
-    }
-
-	void regenerateVisibleTexts(sf::Font& font) {
-		visibleTexts.clear();
-		float maxWidth = size.x - 2 * PADDING;
-		float yOffset = position.y + TOP_MARGIN +16;
-		size_t currentGlobalLine = 0;
-		float currentScroll = scrollOffset;
-
-		contentHeight = 0.0f; // Reset and compute total log height
-
-		// First pass: calculate full content height (all lines)
-		for (const auto& entry : logEntries) {
-			for (const auto& line : entry.wrappedLines) {
-				sf::Text tempText;
-				tempText.setFont(font);
-				tempText.setString(line);
-				tempText.setCharacterSize(entry.charSize);
-				float lineHeight = tempText.getLocalBounds().height + 4;
-				contentHeight += lineHeight;
-			}
-		}
-
-        //Small margin for text at bottom of the console
-        contentHeight += 20;
-
-        if (autoScroll) {
+    
+        void handleScroll(float delta) {
+            autoScroll = false;
+            scrollOffset -= delta * SCROLL_SPEED;
+            float maxScroll = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
+            scrollOffset = std::clamp(scrollOffset, 0.0f, maxScroll);
+            
+            if (scrollOffset >= maxScroll - LINE_HEIGHT) {
+                autoScroll = true;
+            }
+    
+            needsRedraw = true;
+        }
+    
+        void scrollToBottom() {
             float maxScroll = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
             scrollOffset = maxScroll;
+            autoScroll = true;
+            needsRedraw = true;
         }
-
-		yOffset = position.y + TOP_MARGIN + 16;
-		currentScroll = scrollOffset;
-
-        
-
-		// Second pass: generate visible texts
-		for (const auto& entry : logEntries) {
-			for (const auto& line : entry.wrappedLines) {
-				sf::Text text;
-				text.setFont(font);
-				text.setString(line);
-				text.setCharacterSize(entry.charSize);
-				text.setFillColor(entry.color);
-
-				float lineHeight = text.getLocalBounds().height + 4;
-
-				if (currentScroll > lineHeight) {
-					currentScroll -= lineHeight;
-					currentGlobalLine++;
-					continue;
-				}
-
-				if (yOffset > position.y + size.y) {
-					return; // done rendering what's visible
-				}
-
-				text.setPosition(position.x + PADDING, yOffset - currentScroll);
-				visibleTexts.push_back(text);
-				yOffset += lineHeight;
-				currentScroll = 0;
-				currentGlobalLine++;
-			}
-		}
-
-		needsRedraw = false;
-	}
-
-public:
-    ConsoleLogView(sf::Vector2f pos, sf::Vector2f sz) : position(pos), size(sz) {
-        if (size.y < LINE_HEIGHT) size.y = LINE_HEIGHT;
-    }
-
-    void handleResize(sf::Font& font) {
-        float newWidth = size.x;
-        if (std::abs(lastWrapWidth - newWidth) < 1.0f) return;
-
-        lastWrapWidth = newWidth;
-        float maxWidth = newWidth - 2 * PADDING;
-        totalLines = 0;
-
-        for (auto& entry : logEntries) {
-            if (std::abs(entry.lastWrapWidth - maxWidth) > 1.0f) {
-                entry.wrappedLines = wrapText(entry.originalMessage, font, maxWidth, entry.charSize);
-                entry.lastWrapWidth = maxWidth;
+    
+        void DrawConsoleLog(sf::RenderWindow& window, sf::Font& font, sf::RectangleShape background, float inputHeight, float titleBarHeight) {
+            if (needsRedraw) {
+                regenerateVertexArray(font);
             }
-            totalLines += entry.wrappedLines.size();
+    
+            static sf::RenderStates states;
+            for (const auto& batch : batchedTexts) {
+                states.texture = batch.texture;
+                window.draw(batch.vertices, states);
+            }
         }
-
-        needsRedraw = true;
-        if (autoScroll) {
-            scrollToBottom();
+    
+        void setPosition(sf::Vector2f pos) { 
+            position = pos; 
+            needsRedraw = true;
         }
-    }
-
-    void addLog(sf::Font& font, const std::string& message, sf::Color color, float charSize = 16) {
-        float maxWidth = size.x - 2 * PADDING;
-        LogEntry newEntry;
-        newEntry.originalMessage = message;
-        newEntry.color = color;
-		newEntry.charSize = charSize;
-        newEntry.wrappedLines = wrapText(message, font, maxWidth, newEntry.charSize);
-        newEntry.lastWrapWidth = maxWidth;
-        logEntries.push_back(newEntry);
-        totalLines += newEntry.wrappedLines.size();
-
-        while (logEntries.size() > MAX_LOGS) {
-            totalLines -= logEntries.front().wrappedLines.size();
-            logEntries.pop_front();
+    
+        void setSize(sf::Vector2f sz) { 
+            size = sz; 
+            if (size.y < LINE_HEIGHT) size.y = LINE_HEIGHT;
+            needsRedraw = true;
         }
-
-        needsRedraw = true;
-	
-        
-    }
-
-	void handleScroll(float delta) {
-        autoScroll = false;
-        scrollOffset -= delta * SCROLL_SPEED;
-        float maxScroll = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
-        scrollOffset = std::clamp(scrollOffset, 0.0f, maxScroll);
-        
-        if (scrollOffset >= maxScroll - LINE_HEIGHT) {
+    
+        void clear() { 
+            logEntries.clear(); 
+            batchedTexts.clear();
+            scrollOffset = 0;
+            totalLines = 0;
+            needsRedraw = true;
             autoScroll = true;
         }
-
-        needsRedraw = true;
-    }
-
-    void scrollToBottom() {
-		float maxScroll = std::max(0.0f, contentHeight - size.y + TOP_MARGIN);
-		scrollOffset = maxScroll;
-        autoScroll = true;
-        needsRedraw = true;
-    }
-
-    void DrawConsoleLog(sf::RenderWindow& window, sf::Font font, sf::RectangleShape background, float inputHeight, float titleBarHeight) {
-        if (needsRedraw) {
-            regenerateVisibleTexts(font);
+    
+        void setMaxLogs(size_t maxLogs) {
+            MAX_LOGS = maxLogs;
         }
-
-        for (const auto& text : visibleTexts) {
-            window.draw(text);
-        }
-    }
-
-    void setPosition(sf::Vector2f pos) { 
-        position = pos; 
-        needsRedraw = true;
-    }
-
-    void setSize(sf::Vector2f sz) { 
-        size = sz; 
-        if (size.y < LINE_HEIGHT) size.y = LINE_HEIGHT;
-        needsRedraw = true;
-    }
-
-    void clear() { 
-        logEntries.clear(); 
-        visibleTexts.clear();
-        scrollOffset = 0;
-        totalLines = 0;
-        needsRedraw = true;
-        autoScroll = true;
-    }
-
-    void setMaxLogs(size_t MAX_LOGS) {
-        this->MAX_LOGS = MAX_LOGS;
-    }
-};
+    };
 
 /// @brief Handles and stores commands.
 class CommandManager {
@@ -806,6 +904,8 @@ class SFMLConsole {
     sf::Vector2f resizeStartConsoleSize;
 
 	sf::RenderWindow* window = nullptr;
+
+    sf::Color backgroundColor = sf::Color(44,44,44);
 	
 	bool floating = true;
 	
@@ -820,6 +920,7 @@ class SFMLConsole {
 
     sf::Vector2f defaultConsolePosition = sf::Vector2f(300, 300);
     sf::Vector2f consoleSize = sf::Vector2f(900,500);
+    sf::Vector2f position;
 
     float inputHeight = 30;
     float titleBarHeight = 30;
@@ -868,13 +969,16 @@ class SFMLConsole {
 			consoleSize = sf::Vector2f(window.getSize().x, consoleSize.y);
 			defaultConsolePosition = sf::Vector2f(0,0);	
 			logManager.setSize(sf::Vector2f(window.getSize().x, consoleSize.y));
+            backgroundColor = sf::Color(56,56,56,148);
 		}
+
+        bg.setFillColor(backgroundColor);
 		logManager.setPosition(defaultConsolePosition);
 		openConsoleClock.restart();
         bg.setSize(consoleSize);
         bg.setPosition(defaultConsolePosition);
-        bg.setFillColor(sf::Color(56, 56, 56));
-
+        position = defaultConsolePosition;
+        
         bg.setOutlineColor(sf::Color(26, 26, 26));
         bg.setOutlineThickness(2);
 
@@ -1030,40 +1134,163 @@ class SFMLConsole {
 				draggingConsole = false;
 			}
 
-			//Check if cursor is in a resize area, and update the cursor if so,
-            if (!inputObj.isHoveringFlag() && !draggingConsole) {
-			    resizeType region = getResizeRegion(window);
-			    switch (region) {
-			    	case resizeType::TOPLEFT_CORNER:
-			    	case resizeType::BOTTOMRIGHT_CORNER:
-			    		window.setMouseCursor(diagResize1Cursor);
-			    		break;
+            if (floating) {
+			    //Check if cursor is in a resize area, and update the cursor if so,
+                if (!inputObj.isHoveringFlag() && !draggingConsole) {
+			        resizeType region = getResizeRegion(window);
+			        switch (region) {
+			        	case resizeType::TOPLEFT_CORNER:
+			        	case resizeType::BOTTOMRIGHT_CORNER:
+			        		window.setMouseCursor(diagResize1Cursor);
+			        		break;
 
-			    	case resizeType::TOPRIGHT_CORNER:
-			    	case resizeType::BOTTOMLEFT_CORNER:
-			    		window.setMouseCursor(diagResize2Cursor);
-			    		break;
+			        	case resizeType::TOPRIGHT_CORNER:
+			        	case resizeType::BOTTOMLEFT_CORNER:
+			        		window.setMouseCursor(diagResize2Cursor);
+			        		break;
 
-			    	case resizeType::LEFT_EDGE:
-			    	case resizeType::RIGHT_EDGE:
-			    		window.setMouseCursor(hResizeCursor);
-			    		break;
+			        	case resizeType::LEFT_EDGE:
+			        	case resizeType::RIGHT_EDGE:
+			        		window.setMouseCursor(hResizeCursor);
+			        		break;
 
-			    	case resizeType::TOP_EDGE:
-			    	case resizeType::BOTTOM_EDGE:
-			    		window.setMouseCursor(vResizeCursor);
-			    		break;
+			        	case resizeType::TOP_EDGE:
+			        	case resizeType::BOTTOM_EDGE:
+			        		window.setMouseCursor(vResizeCursor);
+			        		break;
 
-			    	case resizeType::NONE:
-			    		window.setMouseCursor(arrowCursor);
-			    		break;
-			    }
-            }   
+			        	case resizeType::NONE:
+			        		window.setMouseCursor(arrowCursor);
+			        		break;
+			        }
+                }   
 		
-			//Check if user is resizing the window
-            if (!draggingConsole) {
-			    if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {  
-			    	if (!resizingConsole) {
+			    //Check if user is resizing the window
+                if (!draggingConsole) {
+			            if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {  
+			            	if (!resizingConsole) {
+                                resizeType currentResizeZone = getResizeRegion(window);
+                                if (currentResizeZone != resizeType::NONE) {
+                                    resizingConsole = true;
+                                    activeResizeRegion = currentResizeZone;
+                                    resizeStartMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                                    resizeStartConsolePos = bg.getPosition();
+                                    resizeStartConsoleSize = consoleSize;
+                                }
+                            }
+			            }
+
+                    if (resizingConsole) {
+                        sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+                        sf::Vector2f delta = mousePos - resizeStartMousePos;
+
+                        sf::Vector2f newSize = resizeStartConsoleSize;
+                        sf::Vector2f newPos = resizeStartConsolePos;
+
+                        switch (activeResizeRegion) {
+                            case resizeType::RIGHT_EDGE:
+                                newSize.x += delta.x;
+                                break;
+                            case resizeType::LEFT_EDGE:
+                                newSize.x -= delta.x;
+                                newPos.x += delta.x;
+                                break;
+                            case resizeType::BOTTOM_EDGE:
+                                newSize.y += delta.y;
+                                break;
+                            case resizeType::TOP_EDGE:
+                                newSize.y -= delta.y;
+                                newPos.y += delta.y;
+                                break;
+                        
+                            case resizeType::TOPLEFT_CORNER:
+                                newSize.x -= delta.x;
+                                newSize.y -= delta.y;
+                                newPos.x += delta.x;
+                                newPos.y += delta.y;
+                                break;
+                        
+                            case resizeType::TOPRIGHT_CORNER:
+                                newSize.x += delta.x;
+                                newSize.y -= delta.y;
+                                newPos.y += delta.y;
+                                break;
+                        
+                            case resizeType::BOTTOMLEFT_CORNER:
+                                newSize.x -= delta.x;
+                                newSize.y += delta.y;
+                                newPos.x += delta.x;
+                                break;
+                        
+                            case resizeType::BOTTOMRIGHT_CORNER:
+                                newSize.x += delta.x;
+                                newSize.y += delta.y;
+                                break;
+                        
+                            default: break;
+                        }
+
+                        const  float minWidth = 100.0f, minHeight = 100.f;
+                        newSize.x = std::max(minWidth, newSize.x);
+                        newSize.y = std::max(minHeight, newSize.y);
+
+                        consoleSize = newSize;
+                        bg.setSize(consoleSize);
+                        bg.setPosition(newPos);
+
+                        logManager.setSize(sf::Vector2f(consoleSize.x, consoleSize.y - inputHeight * 2));
+                        logManager.setPosition(bg.getPosition());
+                        logManager.handleResize(defaultFont);
+
+                        titleBar.setSize(sf::Vector2f(consoleSize.x, titleBarHeight));
+                        titleBar.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y  ));
+                        inputObj.setSize(sf::Vector2f(
+                            bg.getSize().x, //- 2 * inputPadding,
+                            inputHeight //- 2 * inputPadding
+                        ));
+                        inputObj.setPosition(sf::Vector2f(
+                            bg.getPosition().x, //+ inputPadding,
+                            bg.getPosition().y + consoleSize.y - inputHeight //+ inputPadding
+                        ));
+
+                        closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
+                        titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
+
+                    }
+                }
+
+            
+            
+			    // Move titleBar if dragging
+			    // Probably will simplify this as its pretty fucked.
+			    if (draggingConsole && !resizingConsole) {
+			    	bg.setPosition(sf::Vector2f(sf::Mouse::getPosition(window)) + offset);
+                    position = sf::Vector2f(sf::Mouse::getPosition(window)) + offset;
+			    	titleBar.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y  ));
+			    	//input.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y + consoleSize.y));
+			    	closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
+			    	titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
+			    	logManager.setPosition(bg.getPosition());
+
+			    	inputObj.setSize(sf::Vector2f(
+			    		bg.getSize().x,
+			    		inputHeight //- 2 * inputPadding
+			    	));
+			    	inputObj.setPosition(sf::Vector2f(
+			    		bg.getPosition().x, //+ inputPadding,
+			    		bg.getPosition().y + consoleSize.y - inputHeight //+ inputPadding
+			    	));
+
+			    }
+            }
+
+
+
+            //If not a floating window, only allow resizing from the bottom.
+            if (!floating) {
+
+                if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {  
+                    if (!resizingConsole) {
                         resizeType currentResizeZone = getResizeRegion(window);
                         if (currentResizeZone != resizeType::NONE) {
                             resizingConsole = true;
@@ -1073,70 +1300,41 @@ class SFMLConsole {
                             resizeStartConsoleSize = consoleSize;
                         }
                     }
-			    }
+                }
+
+                if (!inputObj.isHoveringFlag() && !draggingConsole) {
+			        resizeType region = getResizeRegion(window);
+			        switch (region) {
+			        	case resizeType::BOTTOM_EDGE:
+			        		window.setMouseCursor(vResizeCursor);
+			        		break;
+			        	case resizeType::NONE:
+			        		window.setMouseCursor(arrowCursor);
+			        		break;
+
+                        default: break;
+			        }
+                } 
 
                 if (resizingConsole) {
                     sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
                     sf::Vector2f delta = mousePos - resizeStartMousePos;
-
                     sf::Vector2f newSize = resizeStartConsoleSize;
                     sf::Vector2f newPos = resizeStartConsolePos;
-
                     switch (activeResizeRegion) {
-                        case resizeType::RIGHT_EDGE:
-                            newSize.x += delta.x;
-                            break;
-                        case resizeType::LEFT_EDGE:
-                            newSize.x -= delta.x;
-                            newPos.x += delta.x;
-                            break;
                         case resizeType::BOTTOM_EDGE:
                             newSize.y += delta.y;
                             break;
-                        case resizeType::TOP_EDGE:
-                            newSize.y -= delta.y;
-                            newPos.y += delta.y;
+                        default:
                             break;
-                    
-                        case resizeType::TOPLEFT_CORNER:
-                            newSize.x -= delta.x;
-                            newSize.y -= delta.y;
-                            newPos.x += delta.x;
-                            newPos.y += delta.y;
-                            break;
-                    
-                        case resizeType::TOPRIGHT_CORNER:
-                            newSize.x += delta.x;
-                            newSize.y -= delta.y;
-                            newPos.y += delta.y;
-                            break;
-                    
-                        case resizeType::BOTTOMLEFT_CORNER:
-                            newSize.x -= delta.x;
-                            newSize.y += delta.y;
-                            newPos.x += delta.x;
-                            break;
-                    
-                        case resizeType::BOTTOMRIGHT_CORNER:
-                            newSize.x += delta.x;
-                            newSize.y += delta.y;
-                            break;
-                    
-                        default: break;
                     }
-
-                    const  float minWidth = 100.0f, minHeight = 100.f;
-                    newSize.x = std::max(minWidth, newSize.x);
-                    newSize.y = std::max(minHeight, newSize.y);
 
                     consoleSize = newSize;
                     bg.setSize(consoleSize);
                     bg.setPosition(newPos);
-
                     logManager.setSize(sf::Vector2f(consoleSize.x, consoleSize.y - inputHeight * 2));
                     logManager.setPosition(bg.getPosition());
                     logManager.handleResize(defaultFont);
-
                     titleBar.setSize(sf::Vector2f(consoleSize.x, titleBarHeight));
                     titleBar.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y  ));
                     inputObj.setSize(sf::Vector2f(
@@ -1147,35 +1345,10 @@ class SFMLConsole {
                         bg.getPosition().x, //+ inputPadding,
                         bg.getPosition().y + consoleSize.y - inputHeight //+ inputPadding
                     ));
-
-                    closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
-                    titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
-
                 }
             }
 
-        
-			
-			// Move titleBar if dragging
-			// Probably will simplify this as its pretty fucked.
-			if (draggingConsole && !resizingConsole) {
-				bg.setPosition(sf::Vector2f(sf::Mouse::getPosition(window)) + offset);
-				titleBar.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y  ));
-				//input.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y + consoleSize.y));
-				closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
-				titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
-				logManager.setPosition(bg.getPosition());
 
-				inputObj.setSize(sf::Vector2f(
-					bg.getSize().x,
-					inputHeight //- 2 * inputPadding
-				));
-				inputObj.setPosition(sf::Vector2f(
-					bg.getPosition().x, //+ inputPadding,
-					bg.getPosition().y + consoleSize.y - inputHeight //+ inputPadding
-				));
-
-			}
 
 			if (event) {
 				inputObj.handleEvent(*event, window);
@@ -1226,6 +1399,27 @@ class SFMLConsole {
 
     }
 
+    /// @brief Forces a resize on the console window.
+    void forceResize() {
+        bg.setSize(consoleSize);
+        bg.setPosition(position);
+        logManager.setSize(sf::Vector2f(consoleSize.x, consoleSize.y - inputHeight * 2));
+        logManager.setPosition(bg.getPosition());
+        logManager.handleResize(defaultFont);
+        titleBar.setSize(sf::Vector2f(consoleSize.x, titleBarHeight));
+        titleBar.setPosition(sf::Vector2f(bg.getPosition().x, bg.getPosition().y  ));
+        inputObj.setSize(sf::Vector2f(
+            bg.getSize().x, //- 2 * inputPadding,
+            inputHeight //- 2 * inputPadding
+        ));
+        inputObj.setPosition(sf::Vector2f(
+            bg.getPosition().x, //+ inputPadding,
+            bg.getPosition().y + consoleSize.y - inputHeight //+ inputPadding
+        ));
+        closeButton.setPosition(sf::Vector2f(titleBar.getPosition().x + titleBar.getSize().x - 30, titleBar.getPosition().y + (titleBar.getSize().y/2) - (closeButton.getLocalBounds().height / 2.f) - closeButton.getLocalBounds().top));
+        titleText.setPosition(sf::Vector2f(titleBar.getPosition().x + 10.0f, titleBar.getPosition().y + (titleBar.getSize().y/2) - (titleText.getLocalBounds().height / 2.f) - titleText.getLocalBounds().top));
+    }
+
 
     // Draw the Console, place this at the very top of your scene, otherwise your game may be drawn over it.
     void Draw(sf::RenderWindow& window) {
@@ -1256,7 +1450,7 @@ class SFMLConsole {
 		logManager.addLog(defaultFont, log, color, charSize);
 	}
 
-    //Set the Title of the console window
+    // Set the Title of the console window
 	void setTitle(std::string title) {
 		titleStr = title;
 		titleText.setString(title);
@@ -1265,6 +1459,33 @@ class SFMLConsole {
     // For Performance reasons, you may want to lower the maximum amount of logs in the console, by default it is 500.
     void setMaxLogs(size_t MAX_LOGS) {
         logManager.setMaxLogs(MAX_LOGS);
+    }
+
+    // Set the size of the console
+    void setSize(sf::Vector2f size) {
+        consoleSize = size;
+        forceResize();
+    }
+
+    // Set the size of the consoles x value;
+    void setSizeX(float sizeX) {
+        consoleSize.x = sizeX;
+        forceResize();
+    }
+    // Set the size of the consoles y value;
+    void setSizeY(float sizeY) {
+        consoleSize.y = sizeY;
+        forceResize();
+    }
+
+    void setBackgroundTransparency(float alpha) {
+        backgroundColor = sf::Color(backgroundColor.r, backgroundColor.g, backgroundColor.b, alpha);
+        bg.setFillColor(backgroundColor);
+    }
+
+    void setBackgroundColor(sf::Color color) {
+        backgroundColor = color;
+        bg.setFillColor(backgroundColor);
     }
 
 };
