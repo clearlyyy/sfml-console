@@ -497,6 +497,7 @@ class ConsoleLogView {
     struct LogEntry {
         std::string originalMessage;
         sf::Color color;
+		float charSize;
         std::vector<std::string> wrappedLines;
         float lastWrapWidth = 0;
     };
@@ -584,7 +585,7 @@ class ConsoleLogView {
                     sf::Text text;
                     text.setFont(font);
                     text.setString(line);
-                    text.setCharacterSize(16);
+                    text.setCharacterSize(entry.charSize);
                     text.setFillColor(entry.color);
                     text.setPosition(position.x + PADDING, yOffset);
                     visibleTexts.push_back(text);
@@ -633,14 +634,14 @@ class ConsoleLogView {
         }
     }
 
-    void addLog(sf::Font& font, const std::string& message, sf::Color color) {
+    void addLog(sf::Font& font, const std::string& message, sf::Color color, float charSize = 16) {
         float maxWidth = size.x - 2 * PADDING;
         LogEntry newEntry;
         newEntry.originalMessage = message;
         newEntry.color = color;
         newEntry.wrappedLines = wrapText(message, font, maxWidth);
         newEntry.lastWrapWidth = maxWidth;
-
+		newEntry.charSize = charSize;
         logEntries.push_back(newEntry);
         totalLines += newEntry.wrappedLines.size();
 
@@ -834,7 +835,7 @@ class SFMLConsole {
             bg.getPosition().y + consoleSize.y - inputHeight //+ inputPadding
         ));
 
-        if (!defaultFont.loadFromFile("Terminal F4.ttf")) {
+        if (!defaultFont.loadFromFile("Tektur-Bold.ttf")) {
             std::cout << "SFML-CONSOLE: ERROR LOADING defaultFont << std::endl" << std::endl;
         }
 
@@ -888,27 +889,36 @@ class SFMLConsole {
 		float top = consolePos.y;
 		float bottom = consolePos.y + consoleSize.y;
 
+		float cornerSize = resizeZonePadding * 4.5f; // You can tweak this
+
+		// Check corners first (bigger square regions)
+		sf::FloatRect topLeftCorner(left - resizeZonePadding, top - resizeZonePadding, cornerSize, cornerSize);
+		sf::FloatRect topRightCorner(right - cornerSize + resizeZonePadding, top - resizeZonePadding, cornerSize, cornerSize);
+		sf::FloatRect bottomLeftCorner(left - resizeZonePadding, bottom - cornerSize + resizeZonePadding, cornerSize, cornerSize);
+		sf::FloatRect bottomRightCorner(right - cornerSize + resizeZonePadding, bottom - cornerSize + resizeZonePadding, cornerSize, cornerSize);
+
+		if (topLeftCorner.contains(mouseWorldPos))     return resizeType::TOPLEFT_CORNER;
+		if (topRightCorner.contains(mouseWorldPos))    return resizeType::TOPRIGHT_CORNER;
+		if (bottomLeftCorner.contains(mouseWorldPos))  return resizeType::BOTTOMLEFT_CORNER;
+		if (bottomRightCorner.contains(mouseWorldPos)) return resizeType::BOTTOMRIGHT_CORNER;
+
+		// Now check edges
 		bool onLeftEdge = (mouseWorldPos.x >= left - resizeZonePadding && mouseWorldPos.x <= left + resizeZonePadding &&
-                            mouseWorldPos.y >= top && mouseWorldPos.y <= bottom);
+						mouseWorldPos.y >= top && mouseWorldPos.y <= bottom);
 		bool onRightEdge = (mouseWorldPos.x >= right - resizeZonePadding && mouseWorldPos.x <= right + resizeZonePadding &&
 							mouseWorldPos.y >= top && mouseWorldPos.y <= bottom);
 		bool onTopEdge = (mouseWorldPos.y >= top - resizeZonePadding && mouseWorldPos.y <= top + resizeZonePadding &&
-						    mouseWorldPos.x >= left && mouseWorldPos.x <= right);
+						mouseWorldPos.x >= left && mouseWorldPos.x <= right);
 		bool onBottomEdge = (mouseWorldPos.y >= bottom - resizeZonePadding && mouseWorldPos.y <= bottom + resizeZonePadding &&
 							mouseWorldPos.x >= left && mouseWorldPos.x <= right);
 
-		if (onTopEdge && onLeftEdge)     return resizeType::TOPLEFT_CORNER;
-		if (onTopEdge && onRightEdge)    return resizeType::TOPRIGHT_CORNER;
-		if (onBottomEdge && onLeftEdge)  return resizeType::BOTTOMLEFT_CORNER;
-		if (onBottomEdge && onRightEdge) return resizeType::BOTTOMRIGHT_CORNER;
-		if (onLeftEdge)                  return resizeType::LEFT_EDGE;
-		if (onRightEdge)                 return resizeType::RIGHT_EDGE;
-		if (onTopEdge)                   return resizeType::TOP_EDGE;
-		if (onBottomEdge)                return resizeType::BOTTOM_EDGE;
+		if (onLeftEdge)   return resizeType::LEFT_EDGE;
+		if (onRightEdge)  return resizeType::RIGHT_EDGE;
+		if (onTopEdge)    return resizeType::TOP_EDGE;
+		if (onBottomEdge) return resizeType::BOTTOM_EDGE;
 
 		return resizeType::NONE;
 	}
-
 	
     public:
 
@@ -1184,8 +1194,8 @@ class SFMLConsole {
         cmdManager.addCommand(cmd, func);
     }
 
-    void log(std::string log, sf::Color color) {
-		logManager.addLog(defaultFont, log, color);
+    void log(std::string log, sf::Color color, float charSize = 16) {
+		logManager.addLog(defaultFont, log, color, charSize);
 	}
 };
 

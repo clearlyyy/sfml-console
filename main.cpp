@@ -1,4 +1,5 @@
 #include <SFML/Graphics.hpp>
+#include <algorithm>
 
 #include "SFMLConsole.hpp"
 
@@ -9,7 +10,7 @@ void changeBGColor(std::vector<std::string> args, sf::Color& bgColor) {
 		int r = std::stoi(args[0]);
 		int g = std::stoi(args[1]);
 		int b = std::stoi(args[2]);
-		console.log("Changed Color to:" + std::to_string(r) + " " + std::to_string(g) + " " + std::to_string(b) + ".", sf::Color(r,g,b));
+		console.log("Changed Color to:" + std::to_string(r) + " " + std::to_string(g) + " " + std::to_string(b) + ".", sf::Color(r,g,b), 24);
 		bgColor = sf::Color(r,g,b);
 	}
 	else {
@@ -20,7 +21,7 @@ void changeBGColor(std::vector<std::string> args, sf::Color& bgColor) {
 void spamConsole(std::vector<std::string> args) {
     SFMLConsole& console = SFMLConsole::getInstance();
     for (int i = 0; i < 500; i++) {
-        console.log("SPAMMING THE CONSOLE WITH A TON OF BULLSHIT!!!!!!!!!!!!!!!!!!!!!", sf::Color(i,i-100,i+100));
+        console.log("SPAMMING THE CONSOLE WITH A TON OF BULLSHIT!!!!!!!!!!!!!!!!!!!!!", sf::Color(i*(i/100),i-100*i,i+100*i), std::clamp(i, 5, 25));
     }
 }
 
