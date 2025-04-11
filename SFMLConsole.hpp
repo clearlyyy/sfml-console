@@ -492,9 +492,6 @@ class InputBox {
         
 };
 
-
-
-
 class ConsoleLogView {
     private:
     struct LogEntry {
@@ -510,7 +507,7 @@ class ConsoleLogView {
     sf::Vector2f size;
     float scrollOffset = 0.0f;
     const float SCROLL_SPEED = 40.0f;
-    const size_t MAX_LOGS = 1000;
+    const size_t MAX_LOGS = 500;
     const float LINE_HEIGHT = 20.0f;
     const float PADDING = 10.0f;
     bool autoScroll = true;
@@ -1072,6 +1069,7 @@ class SFMLConsole {
                     bg.setPosition(newPos);
 
                     logManager.setSize(sf::Vector2f(consoleSize.x, consoleSize.y - inputHeight * 2));
+                    logManager.setPosition(bg.getPosition());
                     logManager.handleResize(defaultFont);
 
                     titleBar.setSize(sf::Vector2f(consoleSize.x, titleBarHeight));

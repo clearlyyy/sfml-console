@@ -17,6 +17,13 @@ void changeBGColor(std::vector<std::string> args, sf::Color& bgColor) {
 	}
 }
 
+void spamConsole(std::vector<std::string> args) {
+    SFMLConsole& console = SFMLConsole::getInstance();
+    for (int i = 0; i < 500; i++) {
+        console.log("SPAMMING THE CONSOLE WITH A TON OF BULLSHIT!!!!!!!!!!!!!!!!!!!!!", sf::Color(i,i-100,i+100));
+    }
+}
+
 int main()
 {
 
@@ -28,13 +35,16 @@ int main()
     SFMLConsole& console = SFMLConsole::createInstance(window);
 	sf::Color bgColor = sf::Color(159,228,237);
 
-	//No Variables need to be passed in
+	
 	//console.addCommand("changeColor", changeBGColor);
 
 	//bgColor needs to be passed in
 	console.addCommand("changeColor", [&](std::vector<std::string> args) {
 		changeBGColor(args, bgColor);
 	});
+
+    //No Variables need to be passed in
+    console.addCommand("spam", spamConsole);
 	
 	
     while (window.isOpen())
