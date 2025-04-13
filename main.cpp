@@ -70,7 +70,6 @@ int main()
 
             console.Update(&event, window);
         }
-        console.Update(nullptr, window);
 		float currentTime = clock.restart().asSeconds();
 		float fps = 1.f / (currentTime - lastTime);
 		if (fpsClock.getElapsedTime().asSeconds() > 0.2) {
