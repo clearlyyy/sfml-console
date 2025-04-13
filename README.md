@@ -33,4 +33,47 @@ while (window.isOpen())
 
 ```
 
+### Adding a command
+There are two ways to add a command, which depends on whether or not the command needs to point to a function that has more parameters than just args.
+```c++
+SFMLConsole& console = SFMLConsole::createInstance(window);
+// Add a command that points to a function which has no parameters other than args.
+console.addCommand("myCommand", myFunction); // Still passing in args, but the function doesn't need any other variables passed in.
+
+//Add a command that takes in arguments
+console.addCommand("changeColor", [&](std::vector<std::string> args) {
+    changeBGColor(args, bgColor); // Pass in bgColor
+});
+```
+
+### Example
+Here is a quick example of adding a command that changes the background/clear color for the SFML Scene.
+```c++
+// Here we change the background color
+void changeBGColor(std::vector<std::string> args, sf::Color& bgColor) {
+	SFMLConsole& console = SFMLConsole::getInstance();
+	if (args.size() >= 3) {
+		int r = std::stoi(args[0]);
+		int g = std::stoi(args[1]);
+		int b = std::stoi(args[2]);
+		console.log("Changed Color to:" + std::to_string(r) + " " + std::to_string(g) + " " + std::to_string(b) + ".", sf::Color(r,g,b), 24);
+		bgColor = sf::Color(r,g,b);
+	}
+	else {
+		console.log("Command must have 3 parameters: r, g, b. eg. changeColor 255 147 244", sf::Color(163, 75, 72));
+	}
+}
+
+// Now to use changeBGColor and take in r, g and b as arguments, and pass in bgColor as a reference, we add it as a command using a lambda.
+sf::Color bgColor;
+console.addCommand("changeColor", [&](std::vector<std::string> args, sf::Color& bgColor) {
+    changeBGColor(args, bgColor); // Now we can pass in bgColor and change it.
+});
+
+// And now we set the background color of the window to bgColor in the game loop.
+window.clear(bgColor);
+```
+Result
+
+![Example 1 Gif](sfml-example1.gif)
 
