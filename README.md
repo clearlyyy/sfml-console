@@ -109,7 +109,7 @@ console.addCommand("spam", spamConsole);
 | forceResize()    | Forces the console to have a resize event |
 | isConsoleVisible() | Returns the visibility of the console   |
 | setVisibility(bool isConsoleVisible)  | Sets the visibility of the console        |
-| addCommand(std::string cmd, std::function<void(std::vector<std::string>)> func)| Adds a command to the console instance    |
+| addCommand(std::string cmd, std::function<void(std::vector<<std::string>>)> func)| Adds a command to the console instance    |
 | log(std::string log, sf::Color color, float charSize = 16)| Creates a log |
 | setTitle(std::string title) | Sets the title of the console window |
 | setMaxLogs(size_t MAX_LOGS) | Sets the maximum amount of logs that can exist in the console at any given time |
