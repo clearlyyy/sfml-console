@@ -67,7 +67,7 @@ void changeBGColor(std::vector<std::string> args, sf::Color& bgColor) {
 // Now to use changeBGColor and take in r, g and b as arguments, 
 // and pass in bgColor as a reference, we add it as a command using a lambda.
 sf::Color bgColor;
-console.addCommand("changeColor", [&](std::vector<std::string> args, sf::Color& bgColor) {
+console.addCommand("changeColor", [&](std::vector<std::string> args) {
     changeBGColor(args, bgColor); // Now we can pass in bgColor and change it.
 });
 
