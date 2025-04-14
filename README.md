@@ -5,7 +5,7 @@ sfml-console is a lightweight, bloat-free in-game console designed specifically 
 
 <img src="pic1.png" width="700">
 
-### Easy to use in your project!
+### Installation
 Simply just drag and drop SFMLConsole.hpp into your project, include it, and you have full access to the console.
 
 ### Usage
@@ -64,7 +64,8 @@ void changeBGColor(std::vector<std::string> args, sf::Color& bgColor) {
 	}
 }
 
-// Now to use changeBGColor and take in r, g and b as arguments, and pass in bgColor as a reference, we add it as a command using a lambda.
+// Now to use changeBGColor and take in r, g and b as arguments, 
+// and pass in bgColor as a reference, we add it as a command using a lambda.
 sf::Color bgColor;
 console.addCommand("changeColor", [&](std::vector<std::string> args, sf::Color& bgColor) {
     changeBGColor(args, bgColor); // Now we can pass in bgColor and change it.
@@ -76,4 +77,40 @@ window.clear(bgColor);
 Result
 
 ![Example 1 Gif](sfml-example1.gif)
+
+### Another Example
+
+Here is just a simple command that spams the console, it needs no arguments or variables passed in.
+
+```c++
+// Here we spam the console
+void spamConsole(std::vector<std::string> args) {
+	SFMLConsole& console = SFMLConsole::getInstance();
+	for (int i = 0; i < 500; i++) {
+		console.log("Here is some spam", sf::Color::White);
+	}
+}
+// Now we can add it as a command.
+console.addCommand("spam", spamConsole);
+
+// Even if spamConsole doesn't take in any arguments, you still need to specify the args as a parameter.
+// If the function needs any other variables other than args, then the function must be done
+// With a lambda like the changeBGColor example above.
+```
+
+### Useful functions
+
+| Function | Desc                                              |
+|----------|---------------------------------------------------|
+| createInstance() | Creates an instance of SFMLConsole.       |
+| getInstance()    | Grabs the current instance of SFMLConsole |
+| Update()         | Updates the console instance              |
+| Draw()           | Draws the console                         | 
+| forceResize()    | Forces the console to have a resize event |
+| isConsoleVisible() | Returns the visibility of the console   |
+| setVisibility(bool isConsoleVisible)  | Sets the visibility of the console        |
+| addCommand(std::string cmd, std::function<void(std::vector<std::string>)> func)| Adds a command to the console instance    |
+| log(std::string log, sf::Color color, float charSize = 16)| Creates a log |
+ 
+
 

@@ -961,9 +961,11 @@ class SFMLConsole {
     }
 
 	// Constructor 
-    SFMLConsole(sf::RenderWindow &window, bool disableStartupLogs = false) 
+    SFMLConsole(sf::RenderWindow &window, bool disableStartupLogs = false, bool floating = false) 
      : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)),
        logManager(defaultConsolePosition, sf::Vector2f(consoleSize.x, consoleSize.y - titleBarHeight - inputHeight - 5)) {
+
+		this->floating = floating;
 
 		if (!floating) {
 			consoleSize = sf::Vector2f(window.getSize().x, consoleSize.y);
