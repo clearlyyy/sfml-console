@@ -102,10 +102,10 @@ console.addCommand("spam", spamConsole);
 
 | Function | Description                                       |
 |----------|---------------------------------------------------|
-| createInstance() | Creates an instance of SFMLConsole.       |
+| createInstance(sf::RenderWindow& window, bool disableStartupLogs = false, bool floating = false) | Creates an instance of SFMLConsole.       |
 | getInstance()    | Grabs the current instance of SFMLConsole |
-| Update()         | Updates the console instance              |
-| Draw()           | Draws the console                         | 
+| Update(sf::Event* event, sf::RenderWindow& window)         | Updates the console instance              |
+| Draw(sf::RenderWindow& window)           | Draws the console                         | 
 | forceResize()    | Forces the console to have a resize event |
 | isConsoleVisible() | Returns the visibility of the console   |
 | setVisibility(bool isConsoleVisible)  | Sets the visibility of the console        |
