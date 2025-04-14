@@ -124,4 +124,6 @@ The console may be set in floating mode (default) or fixed mode by setting float
 
 If the console window is existing within world space, you need to create a seperate SFML UI View and make sure the console is within that UI View.
 
+If you'd like a full example of using the console, take a look at main.cpp. 
+
 
