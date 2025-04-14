@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include "SFML/Graphics/RectangleShape.hpp"
-#include "SFML/Window/Keyboard.hpp"
+
 #include <SFML/Graphics.hpp>
 #include <iostream>
 #include <deque>
@@ -961,7 +960,7 @@ class SFMLConsole {
     }
 
 	// Constructor 
-    SFMLConsole(sf::RenderWindow &window, bool disableStartupLogs = false, bool floating = false) 
+    SFMLConsole(sf::RenderWindow &window, bool disableStartupLogs = false, bool floating = true) 
      : inputObj(defaultFont, sf::Vector2f(100, 200), sf::Vector2f(300, 40)),
        logManager(defaultConsolePosition, sf::Vector2f(consoleSize.x, consoleSize.y - titleBarHeight - inputHeight - 5)) {
 
