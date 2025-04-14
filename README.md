@@ -1,7 +1,7 @@
 # sfml-console 📟
 ## Single Header, Easy to use console library for SFML.
 
-sfml-console is a lightweight, bloat-free in-game console designed specifically for SFML applications. Inspired by the powerful consoles found in games like Counter-Strike and Half-Life, it provides developers with a simple and intuitive way to add real-time debugging and command execution to their projects—with minimal setup and maximum flexibility.
+sfml-console is a lightweight, bloat-free in-game console designed for SFML applications. It's Inspired by the consoles found in games like Counter-Strike and Half-Life, it provides developers with a simple and intuitive way to add real-time debugging and command execution to their projects—with minimal setup and maximum flexibility.
 
 <img src="pic1.png" width="700">
 
