@@ -122,4 +122,6 @@ console.addCommand("spam", spamConsole);
 ### Floating mode
 The console may be set in floating mode (default) or fixed mode by setting floating to false in createInstance.
 
+If the console window is existing within world space, you need to create a seperate SFML UI View and make sure the console is within that UI View.
+
 
