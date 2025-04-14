@@ -1084,7 +1084,7 @@ class SFMLConsole {
     public:
 
 	//Create the console object.
-	static SFMLConsole& createInstance(sf::RenderWindow& window, bool disableStartupLogs = false) {
+	static SFMLConsole& createInstance(sf::RenderWindow& window, bool disableStartupLogs = false, bool floating = false) {
 		if (instance == nullptr) {
 			instance = new SFMLConsole(window, disableStartupLogs);
 		}

@@ -100,7 +100,7 @@ console.addCommand("spam", spamConsole);
 
 ### Useful functions
 
-| Function | Desc                                              |
+| Function | Description                                       |
 |----------|---------------------------------------------------|
 | createInstance() | Creates an instance of SFMLConsole.       |
 | getInstance()    | Grabs the current instance of SFMLConsole |
@@ -111,6 +111,15 @@ console.addCommand("spam", spamConsole);
 | setVisibility(bool isConsoleVisible)  | Sets the visibility of the console        |
 | addCommand(std::string cmd, std::function<void(std::vector<std::string>)> func)| Adds a command to the console instance    |
 | log(std::string log, sf::Color color, float charSize = 16)| Creates a log |
- 
+| setTitle(std::string title) | Sets the title of the console window |
+| setMaxLogs(size_t MAX_LOGS) | Sets the maximum amount of logs that can exist in the console at any given time |
+| setSize(sf::Vector2f size) | Sets the size of the console |
+| setSizeX, setSizeY, (float size) | Sets size of the console with a float |
+| setBackgroundTransparency(float alpha) | Sets the transparency of the console window |
+| setBackgroundColor(sf::Color color) | Sets the color of the console window
+
+
+### Floating mode
+The console may be set in floating mode (default) or fixed mode by setting floating to false in createInstance.
 
 
