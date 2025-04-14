@@ -1,4 +1,4 @@
-# sfml-console
+# sfml-console 📟
 ## Single Header, Easy to use console library for SFML.
 
 sfml-console is a lightweight, bloat-free in-game console designed specifically for SFML applications. Inspired by the powerful consoles found in games like Counter-Strike and Half-Life, it provides developers with a simple and intuitive way to add real-time debugging and command execution to their projects—with minimal setup and maximum flexibility.
@@ -121,5 +121,7 @@ console.addCommand("spam", spamConsole);
 
 ### Floating mode
 The console may be set in floating mode (default) or fixed mode by setting floating to false in createInstance.
+
+If the console window is existing within world space, you need to create a seperate SFML UI View and make sure the console is within that UI View.
 
 
